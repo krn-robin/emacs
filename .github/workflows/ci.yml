@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - "**"
+
+defaults:
+    run:
+      shell: msys2 {0}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: kenchan0130/actions-system-info@master
+        id: system-info
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          install: >-
+            base-devel
+            git
+            tree
+            mingw-w64-x86_64-autotools
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-xpm-nox
+            mingw-w64-x86_64-gmp
+            mingw-w64-x86_64-gnutls
+            mingw-w64-x86_64-libtiff
+            mingw-w64-x86_64-giflib
+            mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-libjpeg-turbo
+            mingw-w64-x86_64-librsvg
+            mingw-w64-x86_64-libwebp
+            mingw-w64-x86_64-lcms2
+            mingw-w64-x86_64-jansson
+            mingw-w64-x86_64-libxml2
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-harfbuzz
+            mingw-w64-x86_64-libgccjit
+            mingw-w64-x86_64-sqlite3
+            mingw-w64-x86_64-tree-sitter
+      - name: Check outputs
+        run: |
+          OUTPUTS=(
+            "CPU Core: ${{ steps.system-info.outputs.cpu-core }}"
+            "CPU Model: ${{ steps.system-info.outputs.cpu-model }}"
+            "Hostname: ${{ steps.system-info.outputs.hostname }}"
+            "Kernel release: ${{ steps.system-info.outputs.kernel-release }}"
+            "Kernel version: ${{ steps.system-info.outputs.kernel-version }}"
+            "Name: ${{ steps.system-info.outputs.name }}"
+            "Platform: ${{ steps.system-info.outputs.platform }}"
+            "Release: ${{ steps.system-info.outputs.release }}"
+            "Total memory bytes: ${{ steps.system-info.outputs.totalmem }}"
+          )
+          IS_EMPTY_OUTOUT=false
+          for OUTPUT in "${OUTPUTS[@]}";do
+            echo "${OUTPUT}"
+            OUT=$(echo ${OUTPUT} | cut -d ':' -f2- | xargs)
+            if [[ -z "${OUT}" ]];then
+              IS_EMPTY_OUTOUT=true
+            fi
+          done
+          if "$IS_EMPTY_OUTOUT";then
+            exit 1
+          fi
+      - run: sh autogen.sh
+      - run: sh configure --prefix=${PWD}/../target --without-dbus
+      - run: make bootstrap -j
+      - run: make install
+      - run: tree -a ../target
+      - run: tar zcfv emacs.tar.gz -C ../target .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: emacs
+          path: emacs.tar.gz
+          retention-days: 5
