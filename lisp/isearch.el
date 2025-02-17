@@ -115,7 +115,7 @@ is called to let you enter the search string, and RET terminates editing
 and does a nonincremental search.)"
   :type 'boolean)
 
-(defcustom search-whitespace-regexp (purecopy "[ \t]+")
+(defcustom search-whitespace-regexp "[ \t]+"
   "If non-nil, regular expression to match a sequence of whitespace chars.
 When you enter a space or spaces in the incremental search, it
 will match any sequence matched by this regexp.  As an exception,
@@ -497,7 +497,7 @@ this variable is nil.")
 (eval-when-compile (require 'help-macro))
 
 (make-help-screen isearch-help-for-help-internal
-  (purecopy "Type a help option: [bkm] or ?")
+  "Type a help option: [bkm] or ?"
   "You have typed %THIS-KEY%, the help character.  Type a Help option:
 \(Type \\<isearch-help-map>\\[help-quit] to exit the Help command.)
 
@@ -3230,7 +3230,7 @@ See more for options in `search-exit-option'."
       (setq isearch-pre-move-point (point)))
      ;; Append control characters to the search string
      ((eq search-exit-option 'append)
-      (unless (memq nil (mapcar (lambda (k) (characterp k)) key))
+      (unless (memq nil (mapcar #'characterp key))
         (isearch-process-search-string key key))
       (setq this-command 'ignore))
      ;; Other characters terminate the search and are then executed normally.
@@ -4654,8 +4654,7 @@ defaults to the value of `isearch-search-fun-default' when nil."
                                          (match-data)))))
             (when found (goto-char found))
             (when match-data (set-match-data
-                              (mapcar (lambda (m) (copy-marker m))
-                                      match-data))))
+                              (mapcar #'copy-marker match-data))))
         (setq found (funcall
                      (or search-fun (isearch-search-fun-default))
                      string (if bound (if isearch-forward

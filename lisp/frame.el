@@ -949,7 +949,13 @@ guess the window-system from the display.
 
 On graphical displays, this function does not itself make the new
 frame the selected frame.  However, the window system may select
-the new frame according to its own rules."
+the new frame according to its own rules.
+
+By default do not display the current buffer in the new frame if the
+buffer is hidden, that is, if the buffer's name starts with a space.
+Display another buffer, one that could be returned by `other-buffer',
+instead.  However, if `expose-hidden-buffer' is non-nil, display the
+current buffer even if it is hidden."
   (interactive)
   (let* ((display (cdr (assq 'display parameters)))
          (w (cond
@@ -1505,13 +1511,6 @@ FRAME defaults to the selected frame."
   (setq frame (window-normalize-frame frame))
   (let ((edges (frame-edges frame 'outer-edges)))
     (- (nth 3 edges) (nth 1 edges))))
-
-(defun frame-at (x y)
-  "Return frame containing pixel position X, Y."
-  (cl-loop for frame in (frame-list-z-order)
-           as (x0 y0 x1 y1) = (frame-edges frame)
-           when (and (<= x0 x (1- x1)) (<= y0 y (1- y1)))
-           return frame))
 
 (declare-function x-list-fonts "xfaces.c"
                   (pattern &optional face frame maximum width))
@@ -2544,6 +2543,10 @@ details depend on the platform and environment.
 The `source' attribute describes the source from which the
 information was obtained.  On X, this may be one of: \"Gdk\",
 \"XRandR 1.5\", \"XRandr\", \"Xinerama\", or \"fallback\".
+If it is \"fallback\", it means Emacs was built without GTK
+and without XrandR or Xinerama extensions, in which case the
+information about multiple physical monitors will be provided
+as if they all as a whole formed a single monitor.
 
 A frame is dominated by a physical monitor when either the
 largest area of the frame resides in the monitor, or the monitor

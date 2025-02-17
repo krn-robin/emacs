@@ -70,9 +70,6 @@
       (setq form `(cons ,(car args) ,form)))
     form))
 
-;; Note: `cl--compiler-macro-cXXr' has been copied to
-;; `internal--compiler-macro-cXXr' in subr.el.  If you amend either
-;; one, you may want to amend the other, too.
 ;;;###autoload
 (define-obsolete-function-alias 'cl--compiler-macro-cXXr
   #'internal--compiler-macro-cXXr "25.1")
@@ -901,9 +898,13 @@ references may appear inside macro expansions, but not inside functions
 called from BODY."
   (declare (indent 1) (debug (symbolp body)))
   (if (cl--safe-expr-p `(progn ,@body)) `(progn ,@body)
-    `(cl--block-wrapper
-      (catch ',(intern (format "--cl-block-%s--" name))
-        ,@body))))
+    (let ((var (intern (format "--cl-block-%s--" name))))
+      `(cl--block-wrapper
+        ;; Build a unique "tag" in the form of a fresh cons.
+        ;; We include `var' in the cons, just in case it help debugging.
+        (let ((,var (cons ',var nil)))
+         (catch ,var
+           ,@body))))))
 
 ;;;###autoload
 (defmacro cl-return (&optional result)
@@ -921,7 +922,7 @@ This is compatible with Common Lisp, but note that `defun' and
 `defmacro' do not create implicit blocks as they do in Common Lisp."
   (declare (indent 1) (debug (symbolp &optional form)))
   (let ((name2 (intern (format "--cl-block-%s--" name))))
-    `(cl--block-throw ',name2 ,result)))
+    `(cl--block-throw ,name2 ,result)))
 
 
 ;;; The "cl-loop" macro.
@@ -3258,7 +3259,7 @@ To see the documentation for a defined struct type, use
                        (declare (side-effect-free t))
                        ,access-body)
                     forms)
-              (when (cl-oddp (length desc))
+              (when (oddp (length desc))
                 (push
                  (macroexp-warn-and-return
                   (format-message
@@ -3672,20 +3673,24 @@ macro that returns its `&whole' argument."
 
 (defvar cl--active-block-names nil)
 
-(cl-define-compiler-macro cl--block-wrapper (cl-form)
-  (let* ((cl-entry (cons (nth 1 (nth 1 cl-form)) nil))
-         (cl--active-block-names (cons cl-entry cl--active-block-names))
-         (cl-body (macroexpand-all      ;Performs compiler-macro expansions.
-                   (macroexp-progn (cddr cl-form))
-                   macroexpand-all-environment)))
-    ;; FIXME: To avoid re-applying macroexpand-all, we'd like to be able
-    ;; to indicate that this return value is already fully expanded.
-    (if (cdr cl-entry)
-        `(catch ,(nth 1 cl-form) ,@(macroexp-unprogn cl-body))
-      cl-body)))
+(cl-define-compiler-macro cl--block-wrapper (form)
+  (pcase form
+    (`(let ((,var . ,val)) (catch ,var . ,body))
+     (let* ((cl-entry (cons var nil))
+            (cl--active-block-names (cons cl-entry cl--active-block-names))
+            (cl-body (macroexpand-all      ;Performs compiler-macro expansions.
+                      (macroexp-progn body)
+                      macroexpand-all-environment)))
+       ;; FIXME: To avoid re-applying macroexpand-all, we'd like to be able
+       ;; to indicate that this return value is already fully expanded.
+       (if (cdr cl-entry)
+           `(let ((,var . ,val)) (catch ,var ,@(macroexp-unprogn cl-body)))
+           cl-body)))
+    ;; `form' was somehow mangled, god knows what happened, let's not touch it.
+    (_ form)))
 
 (cl-define-compiler-macro cl--block-throw (cl-tag cl-value)
-  (let ((cl-found (assq (nth 1 cl-tag) cl--active-block-names)))
+  (let ((cl-found (and (symbolp cl-tag) (assq cl-tag cl--active-block-names))))
     (if cl-found (setcdr cl-found t)))
   `(throw ,cl-tag ,cl-value))
 
@@ -3719,74 +3724,6 @@ macro that returns its `&whole' argument."
   (if def
       `(cl-getf (symbol-plist ,sym) ,prop ,def)
     `(get ,sym ,prop)))
-
-(dolist (y '(cl-first cl-second cl-third cl-fourth
-             cl-fifth cl-sixth cl-seventh
-             cl-eighth cl-ninth cl-tenth
-             cl-rest cl-endp cl-plusp cl-minusp
-             cl-caaar cl-caadr cl-cadar
-             cl-caddr cl-cdaar cl-cdadr
-             cl-cddar cl-cdddr cl-caaaar
-             cl-caaadr cl-caadar cl-caaddr
-             cl-cadaar cl-cadadr cl-caddar
-             cl-cadddr cl-cdaaar cl-cdaadr
-             cl-cdadar cl-cdaddr cl-cddaar
-             cl-cddadr cl-cdddar cl-cddddr))
-  (put y 'side-effect-free t))
-
-;;; Things that are inline.
-(cl-proclaim '(inline cl-acons cl-map cl-notany cl-notevery cl-revappend
-               cl-nreconc))
-
-;;; Things that are side-effect-free.
-(mapc (lambda (x) (function-put x 'side-effect-free t))
-      '(cl-oddp cl-evenp cl-signum cl-ldiff cl-pairlis cl-gcd
-        cl-lcm cl-isqrt cl-floor cl-ceiling cl-truncate cl-round cl-mod cl-rem
-        cl-subseq cl-list-length cl-get cl-getf))
-
-;;; Things that are side-effect-and-error-free.
-(mapc (lambda (x) (function-put x 'side-effect-free 'error-free))
-      '(cl-list* cl-acons cl-equalp
-        cl-random-state-p copy-tree))
-
-;;; Things whose return value should probably be used.
-(mapc (lambda (x) (function-put x 'important-return-value t))
-       '(
-         ;; Functions that are side-effect-free except for the
-         ;; behavior of functions passed as argument.
-         cl-mapcar cl-mapcan cl-maplist cl-map cl-mapcon
-         cl-reduce
-         cl-assoc cl-assoc-if cl-assoc-if-not
-         cl-rassoc cl-rassoc-if cl-rassoc-if-not
-         cl-member cl-member-if cl-member-if-not
-         cl-adjoin
-         cl-mismatch cl-search
-         cl-find cl-find-if cl-find-if-not
-         cl-position cl-position-if cl-position-if-not
-         cl-count cl-count-if cl-count-if-not
-         cl-remove cl-remove-if cl-remove-if-not
-         cl-remove-duplicates
-         cl-subst cl-subst-if cl-subst-if-not
-         cl-substitute cl-substitute-if cl-substitute-if-not
-         cl-sublis
-         cl-union cl-intersection cl-set-difference cl-set-exclusive-or
-         cl-subsetp
-         cl-every cl-some cl-notevery cl-notany
-         cl-tree-equal
-
-         ;; Functions that mutate and return a list.
-         cl-delete cl-delete-if cl-delete-if-not
-         cl-delete-duplicates
-         cl-nsubst cl-nsubst-if cl-nsubst-if-not
-         cl-nsubstitute cl-nsubstitute-if cl-nsubstitute-if-not
-         cl-nunion cl-nintersection cl-nset-difference cl-nset-exclusive-or
-         cl-nreconc cl-nsublis
-         cl-merge
-         ;; It's safe to ignore the value of `cl-sort' and `cl-stable-sort'
-         ;; when used on arrays, but most calls pass lists.
-         cl-sort cl-stable-sort
-         ))
-
 
 ;;; Types and assertions.
 

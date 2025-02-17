@@ -141,6 +141,7 @@ static int max_frame_cols;
 struct tty_display_info *gpm_tty = NULL;
 
 /* Last recorded mouse coordinates.  */
+static Lisp_Object last_mouse_frame;
 static int last_mouse_x, last_mouse_y;
 #endif /* HAVE_GPM */
 
@@ -2558,40 +2559,136 @@ A value of zero means TTY uses the system's default value.  */)
 #if !defined DOS_NT && !defined HAVE_ANDROID
 
 /* Implementation of draw_row_with_mouse_face for TTY/GPM and macOS.  */
+
 void
-tty_draw_row_with_mouse_face (struct window *w, struct glyph_row *row,
-			      int start_hpos, int end_hpos,
+tty_draw_row_with_mouse_face (struct window *w, struct glyph_row *window_row,
+			      int window_start_x,
+			      int window_end_x,
 			      enum draw_glyphs_face draw)
 {
-  int nglyphs = end_hpos - start_hpos;
-  struct frame *f = XFRAME (WINDOW_FRAME (w));
-  struct tty_display_info *tty = FRAME_TTY (f);
-  int face_id = tty->mouse_highlight.mouse_face_face_id;
+  struct frame *f = XFRAME (w->frame);
+  struct frame *root = root_frame (f);
 
-  if (end_hpos >= row->used[TEXT_AREA])
-    nglyphs = row->used[TEXT_AREA] - start_hpos;
+  /* Window coordinates are relative to the text area.  Make
+     them relative to the window's left edge,  */
+  window_end_x = min (window_end_x, window_row->used[TEXT_AREA]);
+  window_start_x += window_row->used[LEFT_MARGIN_AREA];
+  window_end_x += window_row->used[LEFT_MARGIN_AREA];
 
-  int pos_y = row->y + WINDOW_TOP_EDGE_Y (w);
-  int pos_x = row->used[LEFT_MARGIN_AREA] + start_hpos + WINDOW_LEFT_EDGE_X (w);
+  /* Translate from window to window's frame.  */
+  int frame_start_x = WINDOW_LEFT_EDGE_X (w) + window_start_x;
+  int frame_end_x = WINDOW_LEFT_EDGE_X (w) + window_end_x;
+  int frame_y = window_row->y + WINDOW_TOP_EDGE_Y (w);
 
-  /* Save current cursor coordinates.  */
-  int save_y = curY (tty);
+  /* Translate from (possible) child frame to root frame.  */
+  int root_start_x, root_end_x, root_y;
+  root_xy (f, frame_start_x, frame_y, &root_start_x, &root_y);
+  root_xy (f, frame_end_x, frame_y, &root_end_x, &root_y);
+  struct glyph_row *root_row = MATRIX_ROW (root->current_matrix, root_y);
+
+  /* Remember current cursor coordinates so that we can restore
+     them at the end.  */
+  struct tty_display_info *tty = FRAME_TTY (root);
   int save_x = curX (tty);
-  cursor_to (f, pos_y, pos_x);
+  int save_y = curY (tty);
 
-  if (draw == DRAW_MOUSE_FACE)
+  /* If the root frame displays child frames, we cannot naively
+     write to the terminal what the window thinks should be drawn.
+     Instead, write only those parts that are not obscured by
+     other frames.  */
+  for (int root_x = root_start_x; root_x < root_end_x; )
     {
-      struct glyph *glyph = row->glyphs[TEXT_AREA] + start_hpos;
-      struct face *face = FACE_FROM_ID (f, face_id);
-      tty_write_glyphs_with_face (f, glyph, nglyphs, face);
-    }
-  else if (draw == DRAW_NORMAL_TEXT)
-    write_glyphs (f, row->glyphs[TEXT_AREA] + start_hpos, nglyphs);
+      /* Find the start of a run of glyphs from frame F.  */
+      struct glyph *root_start = root_row->glyphs[TEXT_AREA] + root_x;
+      while (root_x < root_end_x && root_start->frame != f)
+	++root_x, ++root_start;
 
+      /* If start of a run of glyphs from F found.  */
+      int root_run_start_x = root_x;
+      if (root_run_start_x < root_end_x)
+	{
+	  /* Find the end of the run of glyphs from frame F.  */
+	  struct glyph *root_end = root_start;
+	  while (root_x < root_end_x && root_end->frame == f)
+	    ++root_x, ++root_end;
+
+	  /* If we have a run glyphs to output, do it.  */
+	  if (root_end > root_start)
+	    {
+	      cursor_to (root, root_y, root_run_start_x);
+	      ptrdiff_t n = root_end - root_start;
+	      switch (draw)
+		{
+		case DRAW_NORMAL_TEXT:
+		  write_glyphs (f, root_start, n);
+		  break;
+
+		case DRAW_MOUSE_FACE:
+		  {
+		    int face_id = tty->mouse_highlight.mouse_face_face_id;
+		    struct face *face = FACE_FROM_ID (f, face_id);
+		    tty_write_glyphs_with_face (f, root_start, n, face);
+		  }
+		  break;
+
+		case DRAW_INVERSE_VIDEO:
+		case DRAW_CURSOR:
+		case DRAW_IMAGE_RAISED:
+		case DRAW_IMAGE_SUNKEN:
+		  emacs_abort ();
+		}
+	    }
+	}
+    }
+
+  /* Restore cursor where it was before.  */
   cursor_to (f, save_y, save_x);
 }
 
 #endif
+
+static Lisp_Object
+tty_frame_at (int x, int y, int *cx, int *cy)
+{
+#ifndef HAVE_ANDROID
+  for (Lisp_Object frames = Ftty_frame_list_z_order (Qnil);
+       !NILP (frames);
+       frames = Fcdr (frames))
+    {
+      Lisp_Object frame = Fcar (frames);
+      struct frame *f = XFRAME (frame);
+      int fx, fy;
+      root_xy (f, 0, 0, &fx, &fy);
+
+      if ((fx <= x && x < fx + f->pixel_width)
+	  && (fy <= y && y < fy + f->pixel_height))
+	{
+	  child_xy (XFRAME (frame), x, y, cx, cy);
+	  return frame;
+	}
+    }
+#endif /* !HAVE_ANDROID */
+
+  return Qnil;
+}
+
+DEFUN ("tty-frame-at", Ftty_frame_at, Stty_frame_at, 2, 2, 0,
+       doc : /* Return tty frame containing absolute pixel position (X, Y).
+Value is nil if no frame found.  Otherwise it is a list (FRAME CX CY),
+where FRAME is the frame containing (X, Y) and CX and CY are X and Y
+relative to FRAME.  */)
+  (Lisp_Object x, Lisp_Object y)
+{
+  if (! FIXNUMP (x) || ! FIXNUMP (y))
+    /* Coordinates this big can not correspond to any frame.  */
+    return Qnil;
+
+  int cx, cy;
+  Lisp_Object frame = tty_frame_at (XFIXNUM (x), XFIXNUM (y), &cx, &cy);
+  if (NILP (frame))
+    return Qnil;
+  return list3 (frame, make_fixnum (cx), make_fixnum (cy));
+}
 
 #ifdef HAVE_GPM
 
@@ -2638,7 +2735,15 @@ term_mouse_position (struct frame **fp, int insist, Lisp_Object *bar_window,
 		     enum scroll_bar_part *part, Lisp_Object *x,
 		     Lisp_Object *y, Time *timeptr)
 {
-  *fp = SELECTED_FRAME ();
+  /* If we've gotten no GPM mouse events yet, last_mouse_frame won't be
+     set.  Perhaps `gpm-mouse-mode' was never active.  */
+  if (!FRAMEP (last_mouse_frame))
+    return;
+
+  *fp = XFRAME (last_mouse_frame);
+  if (!FRAME_LIVE_P (*fp))
+    return;
+
   (*fp)->mouse_moved = 0;
 
   *bar_window = Qnil;
@@ -2713,9 +2818,15 @@ term_mouse_click (struct input_event *result, Gpm_Event *event,
 }
 
 int
-handle_one_term_event (struct tty_display_info *tty, Gpm_Event *event)
+handle_one_term_event (struct tty_display_info *tty, const Gpm_Event *event_in)
 {
-  struct frame *f = XFRAME (tty->top_frame);
+  int child_x = event_in->x, child_y = event_in->y;
+  Lisp_Object frame = tty_frame_at (child_x, child_y, &child_x, &child_y);
+  Gpm_Event event = *event_in;
+  event.x = child_x;
+  event.y = child_y;
+  struct frame *f = decode_live_frame (frame);
+
   struct input_event ie;
   int count = 0;
 
@@ -2723,30 +2834,34 @@ handle_one_term_event (struct tty_display_info *tty, Gpm_Event *event)
   ie.kind = NO_EVENT;
   ie.arg = Qnil;
 
-  if (event->type & (GPM_MOVE | GPM_DRAG))
+  if (event.type & (GPM_MOVE | GPM_DRAG))
     {
-      Gpm_DrawPointer (event->x, event->y, fileno (tty->output));
+      /* The pointer must be drawn using screen coordinates (x,y), not
+	 frame coordinates.  Use event_in which has an unmodified event
+	 directly from GPM.  */
+      Gpm_DrawPointer (event_in->x, event_in->y, fileno (tty->output));
 
       /* Has the mouse moved off the glyph it was on at the last
          sighting?  */
-      if (event->x != last_mouse_x || event->y != last_mouse_y)
+      if (event.x != last_mouse_x || event.y != last_mouse_y)
         {
-          /* FIXME: These three lines can not be moved into
+          /* FIXME: These four lines can not be moved into
              update_mouse_position unless xterm-mouse gets updated to
              generate mouse events via C code.  See
              https://lists.gnu.org/archive/html/emacs-devel/2020-11/msg00163.html */
-          last_mouse_x = event->x;
-          last_mouse_y = event->y;
+          last_mouse_frame = frame;
+          last_mouse_x = event.x;
+          last_mouse_y = event.y;
           f->mouse_moved = 1;
 
-          count += update_mouse_position (f, event->x, event->y);
+          count += update_mouse_position (f, event.x, event.y);
         }
     }
   else
     {
       f->mouse_moved = 0;
-      term_mouse_click (&ie, event, f);
-      ie.arg = tty_handle_tab_bar_click (f, event->x, event->y,
+      term_mouse_click (&ie, &event, f);
+      ie.arg = tty_handle_tab_bar_click (f, event.x, event.y,
 					 (ie.modifiers & down_modifier) != 0, &ie);
       kbd_buffer_store_event (&ie);
       count++;
@@ -2942,19 +3057,15 @@ tty_menu_calc_size (tty_menu *menu, int *width, int *height)
 static void
 mouse_get_xy (int *x, int *y)
 {
-  Lisp_Object lmx = Qnil, lmy = Qnil;
   Lisp_Object mouse = mouse_position (tty_menu_calls_mouse_position_function);
 
-  if (EQ (selected_frame, XCAR (mouse)))
+  struct frame *f = XFRAME (XCAR (mouse));
+  struct frame *sf = SELECTED_FRAME ();
+  if (f == sf || frame_ancestor_p (sf, f))
     {
-      lmx = XCAR (XCDR (mouse));
-      lmy = XCDR (XCDR (mouse));
-    }
-
-  if (!NILP (lmx))
-    {
-      *x = XFIXNUM (lmx);
-      *y = XFIXNUM (lmy);
+      int mx = XFIXNUM (XCAR (XCDR (mouse)));
+      int my = XFIXNUM (XCDR (XCDR (mouse)));
+      root_xy (f, mx, my, x, y);
     }
 }
 
@@ -4967,9 +5078,11 @@ trigger redisplay.  */);
   defsubr (&Stty__set_output_buffer_size);
   defsubr (&Stty__output_buffer_size);
 #endif /* !HAVE_ANDROID */
+  defsubr (&Stty_frame_at);
 #ifdef HAVE_GPM
   defsubr (&Sgpm_mouse_start);
   defsubr (&Sgpm_mouse_stop);
+  staticpro (&last_mouse_frame);
 #endif /* HAVE_GPM */
 
   defsubr (&Stty_frame_geometry);

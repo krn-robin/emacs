@@ -388,6 +388,7 @@ AC_DEFUN([gl_INIT],
     gl_MODULE_INDICATOR_INIT_VARIABLE([GNULIB_UNISTD_H_GETOPT], [1])
   ])
   gl_UNISTD_MODULE_INDICATOR([getopt-posix])
+  gl_MUSL_LIBC
   AC_REQUIRE([AC_CANONICAL_HOST])
   gl_FUNC_GETRANDOM
   gl_CONDITIONAL([GL_COND_OBJ_GETRANDOM],
@@ -423,6 +424,11 @@ AC_DEFUN([gl_INIT],
   ])
   gl_SYS_STAT_MODULE_INDICATOR([lstat])
   gl_MODULE_INDICATOR([lstat])
+  gl_FUNC_MALLOC_GNU
+  if test $REPLACE_MALLOC_FOR_MALLOC_GNU = 1; then
+    AC_LIBOBJ([malloc])
+  fi
+  gl_STDLIB_MODULE_INDICATOR([malloc-gnu])
   AC_REQUIRE([gl_FUNC_MALLOC_POSIX])
   if test $REPLACE_MALLOC_FOR_MALLOC_POSIX = 1; then
     AC_LIBOBJ([malloc])
@@ -501,6 +507,11 @@ AC_DEFUN([gl_INIT],
   gl_CONDITIONAL([GL_COND_OBJ_READLINKAT],
                  [test $HAVE_READLINKAT = 0 || test $REPLACE_READLINKAT = 1])
   gl_UNISTD_MODULE_INDICATOR([readlinkat])
+  gl_FUNC_REALLOC_POSIX
+  gl_FUNC_REALLOC_0_NONNULL
+  gl_CONDITIONAL([GL_COND_OBJ_REALLOC_POSIX],
+                 [test $REPLACE_REALLOC_FOR_REALLOC_POSIX != 0])
+  gl_STDLIB_MODULE_INDICATOR([realloc-posix])
   gl_REGEX
   gl_CONDITIONAL([GL_COND_OBJ_REGEX], [test $ac_use_included_regex = yes])
   AM_COND_IF([GL_COND_OBJ_REGEX], [
@@ -683,12 +694,10 @@ AC_DEFUN([gl_INIT],
   gl_gnulib_enabled_8444034ea779b88768865bb60b4fb8c9=false
   gl_gnulib_enabled_a9786850e999ae65a836a6041e8e5ed1=false
   gl_gnulib_enabled_lchmod=false
-  gl_gnulib_enabled_e80bf6f757095d2e5fc94dafb8f8fc8b=false
   gl_gnulib_enabled_5264294aa0a5557541b53c8c741f7f31=false
   gl_gnulib_enabled_open=false
   gl_gnulib_enabled_03e0aaad4cb89ca757653bd367a6ccb7=false
   gl_gnulib_enabled_rawmemchr=false
-  gl_gnulib_enabled_61bcaca76b3e6f9ae55d57a1c3193bc4=false
   gl_gnulib_enabled_6099e9737f757db36c47fa9d9f02e88c=false
   gl_gnulib_enabled_strtoll=false
   gl_gnulib_enabled_utimens=false
@@ -810,7 +819,6 @@ AC_DEFUN([gl_INIT],
     if $gl_gnulib_enabled_8444034ea779b88768865bb60b4fb8c9; then :; else
       AC_PROG_MKDIR_P
       gl_gnulib_enabled_8444034ea779b88768865bb60b4fb8c9=true
-      func_gl_gnulib_m4code_61bcaca76b3e6f9ae55d57a1c3193bc4
     fi
   }
   func_gl_gnulib_m4code_a9786850e999ae65a836a6041e8e5ed1 ()
@@ -826,9 +834,6 @@ AC_DEFUN([gl_INIT],
       if test $HAVE_GROUP_MEMBER = 0; then
         func_gl_gnulib_m4code_getgroups
       fi
-      if test $HAVE_GROUP_MEMBER = 0; then
-        func_gl_gnulib_m4code_e80bf6f757095d2e5fc94dafb8f8fc8b
-      fi
     fi
   }
   func_gl_gnulib_m4code_lchmod ()
@@ -841,17 +846,6 @@ AC_DEFUN([gl_INIT],
       ])
       gl_SYS_STAT_MODULE_INDICATOR([lchmod])
       gl_gnulib_enabled_lchmod=true
-    fi
-  }
-  func_gl_gnulib_m4code_e80bf6f757095d2e5fc94dafb8f8fc8b ()
-  {
-    if $gl_gnulib_enabled_e80bf6f757095d2e5fc94dafb8f8fc8b; then :; else
-      gl_FUNC_MALLOC_GNU
-      if test $REPLACE_MALLOC_FOR_MALLOC_GNU = 1; then
-        AC_LIBOBJ([malloc])
-      fi
-      gl_STDLIB_MODULE_INDICATOR([malloc-gnu])
-      gl_gnulib_enabled_e80bf6f757095d2e5fc94dafb8f8fc8b=true
     fi
   }
   func_gl_gnulib_m4code_5264294aa0a5557541b53c8c741f7f31 ()
@@ -896,17 +890,6 @@ AC_DEFUN([gl_INIT],
       ])
       gl_STRING_MODULE_INDICATOR([rawmemchr])
       gl_gnulib_enabled_rawmemchr=true
-    fi
-  }
-  func_gl_gnulib_m4code_61bcaca76b3e6f9ae55d57a1c3193bc4 ()
-  {
-    if $gl_gnulib_enabled_61bcaca76b3e6f9ae55d57a1c3193bc4; then :; else
-      gl_FUNC_REALLOC_POSIX
-      gl_FUNC_REALLOC_0_NONNULL
-      gl_CONDITIONAL([GL_COND_OBJ_REALLOC_POSIX],
-                     [test $REPLACE_REALLOC_FOR_REALLOC_POSIX != 0])
-      gl_STDLIB_MODULE_INDICATOR([realloc-posix])
-      gl_gnulib_enabled_61bcaca76b3e6f9ae55d57a1c3193bc4=true
     fi
   }
   func_gl_gnulib_m4code_6099e9737f757db36c47fa9d9f02e88c ()
@@ -1011,9 +994,6 @@ AC_DEFUN([gl_INIT],
     func_gl_gnulib_m4code_fd38c7e463b54744b77b98aeafb4fa7c
   fi
   if test $ac_use_included_regex = yes; then
-    func_gl_gnulib_m4code_e80bf6f757095d2e5fc94dafb8f8fc8b
-  fi
-  if test $ac_use_included_regex = yes; then
     func_gl_gnulib_m4code_verify
   fi
   if test $HAVE_DECL_STRTOIMAX = 0 || test $REPLACE_STRTOIMAX = 1; then
@@ -1046,12 +1026,10 @@ AC_DEFUN([gl_INIT],
   AM_CONDITIONAL([gl_GNULIB_ENABLED_8444034ea779b88768865bb60b4fb8c9], [$gl_gnulib_enabled_8444034ea779b88768865bb60b4fb8c9])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_a9786850e999ae65a836a6041e8e5ed1], [$gl_gnulib_enabled_a9786850e999ae65a836a6041e8e5ed1])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_lchmod], [$gl_gnulib_enabled_lchmod])
-  AM_CONDITIONAL([gl_GNULIB_ENABLED_e80bf6f757095d2e5fc94dafb8f8fc8b], [$gl_gnulib_enabled_e80bf6f757095d2e5fc94dafb8f8fc8b])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_5264294aa0a5557541b53c8c741f7f31], [$gl_gnulib_enabled_5264294aa0a5557541b53c8c741f7f31])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_open], [$gl_gnulib_enabled_open])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_03e0aaad4cb89ca757653bd367a6ccb7], [$gl_gnulib_enabled_03e0aaad4cb89ca757653bd367a6ccb7])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_rawmemchr], [$gl_gnulib_enabled_rawmemchr])
-  AM_CONDITIONAL([gl_GNULIB_ENABLED_61bcaca76b3e6f9ae55d57a1c3193bc4], [$gl_gnulib_enabled_61bcaca76b3e6f9ae55d57a1c3193bc4])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_6099e9737f757db36c47fa9d9f02e88c], [$gl_gnulib_enabled_6099e9737f757db36c47fa9d9f02e88c])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_strtoll], [$gl_gnulib_enabled_strtoll])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_utimens], [$gl_gnulib_enabled_utimens])
@@ -1079,27 +1057,35 @@ AC_DEFUN([gl_INIT],
     gl_libobjs=
     gl_ltlibobjs=
     gl_libobjdeps=
+    gl_libgnu_libobjs=
+    gl_libgnu_ltlibobjs=
+    gl_libgnu_libobjdeps=
     if test -n "$gl_LIBOBJS"; then
       # Remove the extension.
 changequote(,)dnl
       sed_drop_objext='s/\.o$//;s/\.obj$//'
       sed_dirname1='s,//*,/,g'
       sed_dirname2='s,\(.\)/$,\1,'
-      sed_dirname3='s,^[^/]*$,.,'
-      sed_dirname4='s,\(.\)/[^/]*$,\1,'
+      sed_dirname3='s,[^/]*$,,'
       sed_basename1='s,.*/,,'
 changequote([, ])dnl
       for i in `for i in $gl_LIBOBJS; do echo "$i"; done | sed -e "$sed_drop_objext" | sort | uniq`; do
         gl_libobjs="$gl_libobjs $i.$ac_objext"
         gl_ltlibobjs="$gl_ltlibobjs $i.lo"
-        i_dir=`echo "$i" | sed -e "$sed_dirname1" -e "$sed_dirname2" -e "$sed_dirname3" -e "$sed_dirname4"`
+        i_dir=`echo "$i" | sed -e "$sed_dirname1" -e "$sed_dirname2" -e "$sed_dirname3"`
         i_base=`echo "$i" | sed -e "$sed_basename1"`
-        gl_libobjdeps="$gl_libobjdeps $i_dir/\$(DEPDIR)/$i_base.Po"
+        gl_libgnu_libobjs="$gl_libgnu_libobjs $i_dir""libgnu_a-$i_base.$ac_objext"
+        gl_libgnu_ltlibobjs="$gl_libgnu_ltlibobjs $i_dir""libgnu_la-$i_base.lo"
+        gl_libobjdeps="$gl_libobjdeps $i_dir\$(DEPDIR)/$i_base.Po"
+        gl_libgnu_libobjdeps="$gl_libgnu_libobjdeps $i_dir\$(DEPDIR)/libgnu_a-$i_base.Po"
       done
     fi
     AC_SUBST([gl_LIBOBJS], [$gl_libobjs])
     AC_SUBST([gl_LTLIBOBJS], [$gl_ltlibobjs])
     AC_SUBST([gl_LIBOBJDEPS], [$gl_libobjdeps])
+    AC_SUBST([gl_libgnu_LIBOBJS], [$gl_libgnu_libobjs])
+    AC_SUBST([gl_libgnu_LTLIBOBJS], [$gl_libgnu_ltlibobjs])
+    AC_SUBST([gl_libgnu_LIBOBJDEPS], [$gl_libgnu_libobjdeps])
   ])
   gltests_libdeps=
   gltests_ltlibdeps=
@@ -1143,27 +1129,35 @@ changequote([, ])dnl
     gltests_libobjs=
     gltests_ltlibobjs=
     gltests_libobjdeps=
+    gltests_libgnu_libobjs=
+    gltests_libgnu_ltlibobjs=
+    gltests_libgnu_libobjdeps=
     if test -n "$gltests_LIBOBJS"; then
       # Remove the extension.
 changequote(,)dnl
       sed_drop_objext='s/\.o$//;s/\.obj$//'
       sed_dirname1='s,//*,/,g'
       sed_dirname2='s,\(.\)/$,\1,'
-      sed_dirname3='s,^[^/]*$,.,'
-      sed_dirname4='s,\(.\)/[^/]*$,\1,'
+      sed_dirname3='s,[^/]*$,,'
       sed_basename1='s,.*/,,'
 changequote([, ])dnl
       for i in `for i in $gltests_LIBOBJS; do echo "$i"; done | sed -e "$sed_drop_objext" | sort | uniq`; do
         gltests_libobjs="$gltests_libobjs $i.$ac_objext"
         gltests_ltlibobjs="$gltests_ltlibobjs $i.lo"
-        i_dir=`echo "$i" | sed -e "$sed_dirname1" -e "$sed_dirname2" -e "$sed_dirname3" -e "$sed_dirname4"`
+        i_dir=`echo "$i" | sed -e "$sed_dirname1" -e "$sed_dirname2" -e "$sed_dirname3"`
         i_base=`echo "$i" | sed -e "$sed_basename1"`
-        gltests_libobjdeps="$gltests_libobjdeps $i_dir/\$(DEPDIR)/$i_base.Po"
+        gltests_libgnu_libobjs="$gltests_libgnu_libobjs $i_dir""libgnu_a-$i_base.$ac_objext"
+        gltests_libgnu_ltlibobjs="$gltests_libgnu_ltlibobjs $i_dir""libgnu_la-$i_base.lo"
+        gltests_libobjdeps="$gltests_libobjdeps $i_dir\$(DEPDIR)/$i_base.Po"
+        gltests_libgnu_libobjdeps="$gltests_libgnu_libobjdeps $i_dir\$(DEPDIR)/libgnu_a-$i_base.Po"
       done
     fi
     AC_SUBST([gltests_LIBOBJS], [$gltests_libobjs])
     AC_SUBST([gltests_LTLIBOBJS], [$gltests_ltlibobjs])
     AC_SUBST([gltests_LIBOBJDEPS], [$gltests_libobjdeps])
+    AC_SUBST([gltests_libgnu_LIBOBJS], [$gltests_libgnu_libobjs])
+    AC_SUBST([gltests_libgnu_LTLIBOBJS], [$gltests_libgnu_ltlibobjs])
+    AC_SUBST([gltests_libgnu_LIBOBJDEPS], [$gltests_libgnu_libobjdeps])
   ])
   AC_REQUIRE([gl_CC_GNULIB_WARNINGS])
   LIBGNU_LIBDEPS="$gl_libdeps"

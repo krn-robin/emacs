@@ -1152,20 +1152,6 @@ default_pixels_per_inch_y (void)
 /* True if frame F is currently visible.  */
 #define FRAME_VISIBLE_P(f) (f)->visible
 
-/* True if frame F should be redisplayed.  This is normally the same
-   as FRAME_VISIBLE_P (f).  Under X, frames can continue to be
-   displayed to the user by the compositing manager even if they are
-   invisible, so this also checks whether or not the frame is reported
-   visible by the X server.  */
-
-#ifndef HAVE_X_WINDOWS
-#define FRAME_REDISPLAY_P(f) FRAME_VISIBLE_P (f)
-#else
-#define FRAME_REDISPLAY_P(f) (FRAME_VISIBLE_P (f)		\
-			      || (FRAME_X_P (f)			\
-				  && FRAME_X_VISIBLE (f)))
-#endif
-
 /* True if frame F is currently iconified.  */
 #define FRAME_ICONIFIED_P(f) (f)->iconified
 
@@ -1428,23 +1414,6 @@ FRAME_PARENT_FRAME (struct frame *f)
 /* False means there are no visible garbaged frames.  */
 extern bool frame_garbaged;
 
-/* Set visibility of frame F.
-   We call redisplay_other_windows to make sure the frame gets redisplayed
-   if some changes were applied to it while it wasn't visible (and hence
-   wasn't redisplayed).  */
-INLINE void
-SET_FRAME_VISIBLE (struct frame *f, bool v)
-{
-  if (v)
-    {
-      if (v == 1 && f->visible != 1)
-	redisplay_other_windows ();
-      if (FRAME_GARBAGED_P (f))
-	frame_garbaged = true;
-    }
-  f->visible = v;
-}
-
 /* Set iconified status of frame F.  */
 INLINE void
 SET_FRAME_ICONIFIED (struct frame *f, int i)
@@ -1490,6 +1459,7 @@ extern struct frame *decode_live_frame (Lisp_Object);
 extern struct frame *decode_any_frame (Lisp_Object);
 extern struct frame *make_initial_frame (void);
 extern struct frame *make_frame (bool);
+extern bool frame_redisplay_p (struct frame *);
 extern int tty_child_pos_param (struct frame *, Lisp_Object,
 				Lisp_Object, int);
 extern int tty_child_size_param (struct frame *, Lisp_Object,
@@ -1518,6 +1488,7 @@ void check_tty (struct frame *f);
 struct frame *decode_tty_frame (Lisp_Object frame);
 extern void frame_make_pointer_invisible (struct frame *);
 extern void frame_make_pointer_visible (struct frame *);
+extern struct frame *root_frame (struct frame *f);
 extern Lisp_Object delete_frame (Lisp_Object, Lisp_Object);
 extern bool frame_inhibit_resize (struct frame *, bool, Lisp_Object);
 extern void adjust_frame_size (struct frame *, int, int, int, bool,
@@ -1541,6 +1512,27 @@ extern Lisp_Object Vframe_list;
       ? XFRAME (selected_frame)				\
       : (emacs_abort (), (struct frame *) 0))
 
+/* Set visibility of frame F.
+   We call redisplay_other_windows to make sure the frame gets redisplayed
+   if some changes were applied to it while it wasn't visible (and hence
+   wasn't redisplayed).  */
+INLINE void
+SET_FRAME_VISIBLE (struct frame *f, bool v)
+{
+  if (v)
+    {
+      if (v == 1 && f->visible != 1)
+	redisplay_other_windows ();
+      if (FRAME_GARBAGED_P (f))
+	frame_garbaged = true;
+    }
+  /* If F is a child frame on a tty and is the selected frame, try to
+     re-select the frame that was selected before F.  */
+  else if (is_tty_child_frame (f) && f == XFRAME (selected_frame))
+    do_switch_frame (mru_rooted_frame (f), 0, 0, Qnil);
+
+  f->visible = v;
+}
 
 /***********************************************************************
 			Display-related Macros

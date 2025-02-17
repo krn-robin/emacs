@@ -380,7 +380,7 @@ BODY is the test body."
    (let ((is-odd (lambda (node)
                    (let ((string (treesit-node-text node)))
                      (and (eq 1 (length string))
-                          (cl-oddp (string-to-number string)))))))
+                          (oddp (string-to-number string)))))))
      (cl-loop for cursor = (treesit-node-child array 0)
               then (treesit-search-forward cursor `("number" . ,is-odd)
                                            nil t)
@@ -410,6 +410,27 @@ BODY is the test body."
    ;; If everything works, this should not hang.
    (let ((missing-bracket (treesit-node-child array -1)))
      (treesit-search-forward missing-bracket "" t))))
+
+;;; Indent
+
+(ert-deftest treesit-test-add-simple-indent-rules ()
+  "Test `treesit-add-simple-indent-rules'."
+  (let ((treesit-simple-indent-rules
+         (copy-tree '((c (a a a) (b b b) (c c c))))))
+    (treesit-add-simple-indent-rules 'c '((d d d)))
+    (should (equal treesit-simple-indent-rules
+                   '((c (d d d) (a a a) (b b b) (c c c)))))
+    (treesit-add-simple-indent-rules 'c '((e e e)) :after)
+    (should (equal treesit-simple-indent-rules
+                   '((c (d d d) (a a a) (b b b) (c c c) (e e e)))))
+    (treesit-add-simple-indent-rules 'c '((f f f)) :after '(b b b))
+    (should (equal treesit-simple-indent-rules
+                   '((c (d d d) (a a a) (b b b) (f f f)
+                        (c c c) (e e e)))))
+    (treesit-add-simple-indent-rules 'c '((g g g)) :before '(b b b))
+    (should (equal treesit-simple-indent-rules
+                   '((c (d d d) (a a a) (g g g)
+                        (b b b) (f f f) (c c c) (e e e)))))))
 
 ;;; Query
 
@@ -697,58 +718,60 @@ visible_end.)"
   (with-temp-buffer
     (let ((parser (treesit-parser-create 'json)))
       (insert "11111111111111111111")
-      (treesit-parser-set-included-ranges parser '((1 . 20)))
+      (treesit-parser-set-included-ranges parser (copy-tree '((1 . 20))))
       (treesit-parser-root-node parser)
       (should (equal (treesit-parser-included-ranges parser)
-                     '((1 . 20))))
+                     (copy-tree '((1 . 20)))))
 
       (narrow-to-region 5 15)
       (should (equal (treesit-parser-included-ranges parser)
-                     '((5 . 15))))
+                     (copy-tree '((5 . 15)))))
 
       (widen)
       ;; Trickier ranges
       ;; 11111111111111111111
       ;; [    ]      [      ]
       ;;    {  narrow   }
-      (treesit-parser-set-included-ranges parser '((1 . 7) (10 . 15)))
+      (treesit-parser-set-included-ranges
+       parser (copy-tree '((1 . 7) (10 . 15))))
       (should (equal (treesit-parser-included-ranges parser)
-                     '((1 . 7) (10 . 15))))
+                     (copy-tree '((1 . 7) (10 . 15)))))
       (narrow-to-region 5 13)
       (should (equal (treesit-parser-included-ranges parser)
-                     '((5 . 7) (10 . 13))))
+                     (copy-tree '((5 . 7) (10 . 13)))))
 
       ;; Narrow in front, and discard the last one.
       (widen)
       (treesit-parser-set-included-ranges
-       parser '((4 . 10) (12 . 14) (16 . 20)))
+       parser (copy-tree '((4 . 10) (12 . 14) (16 . 20))))
       ;; 11111111111111111111
       ;;    [    ] [  ]  [  ]
       ;; {     } narrow
       (narrow-to-region 1 8)
       (should (equal (treesit-parser-included-ranges parser)
-                     '((4 . 8))))
+                     (copy-tree '((4 . 8)))))
 
       ;; Narrow in back, and discard the first one.
       (widen)
       (treesit-parser-set-included-ranges
-       parser '((1 . 5) (7 . 9) (11 . 17)))
+       parser (copy-tree '((1 . 5) (7 . 9) (11 . 17))))
       ;; 11111111111111111111
       ;; [  ] [  ]  [    ]
       ;;              {     } narrow
       (narrow-to-region 15 20)
       (should (equal (treesit-parser-included-ranges parser)
-                     '((15 . 17))))
+                     (copy-tree '((15 . 17)))))
 
       ;; No overlap
       (widen)
-      (treesit-parser-set-included-ranges parser '((15 . 20)))
+      (treesit-parser-set-included-ranges
+       parser (copy-tree '((15 . 20))))
       ;; 11111111111111111111
       ;;    [           ]
       ;;              {     } narrow
       (narrow-to-region 1 10)
       (should (equal (treesit-parser-included-ranges parser)
-                     '((1 . 1)))))))
+                     (copy-tree '((1 . 1))))))))
 
 ;;; Multiple language
 
@@ -1275,11 +1298,11 @@ This tests bug#60355."
 (ert-deftest treesit-imenu ()
   "Test imenu functions."
   (should (equal (treesit--imenu-merge-entries
-                  '(("Function" . (f1 f2))
-                    ("Function" . (f3 f4 f5))
-                    ("Class" . (c1 c2 c3))
-                    ("Variables" . (v1 v2))
-                    ("Class" . (c4))))
+                  (copy-tree '(("Function" . (f1 f2))
+                               ("Function" . (f3 f4 f5))
+                               ("Class" . (c1 c2 c3))
+                               ("Variables" . (v1 v2))
+                               ("Class" . (c4)))))
                  '(("Function" . (f1 f2 f3 f4 f5))
                    ("Class" . (c1 c2 c3 c4))
                    ("Variables" . (v1 v2))))))

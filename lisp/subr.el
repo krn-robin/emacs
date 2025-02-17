@@ -550,6 +550,20 @@ was called."
            (compiler-macro (lambda (_) `(= 0 ,number))))
   (= 0 number))
 
+(defun oddp (integer)
+  "Return t if INTEGER is odd."
+  (declare (ftype (function (integer) boolean))
+           (side-effect-free t)
+           (compiler-macro (lambda (_) `(eq (logand ,integer 1) 1))))
+  (eq (logand integer 1) 1))
+
+(defun evenp (integer)
+  "Return t if INTEGER is even."
+  (declare (ftype (function (integer) boolean))
+           (side-effect-free t)
+           (compiler-macro (lambda (_) `(eq (logand ,integer 1) 0))))
+  (eq (logand integer 1) 0))
+
 (defun fixnump (object)
   "Return t if OBJECT is a fixnum."
   (declare (ftype (function (t) boolean))
@@ -590,9 +604,6 @@ treatment of negative COUNT provided by this function."
 
 ;;;; List functions.
 
-;; Note: `internal--compiler-macro-cXXr' was copied from
-;; `cl--compiler-macro-cXXr' in cl-macs.el.  If you amend either one,
-;; you may want to amend the other, too.
 (defun internal--compiler-macro-cXXr (form x)
   (let* ((head (car form))
          (n (symbol-name head))
@@ -609,142 +620,170 @@ treatment of negative COUNT provided by this function."
 
 (defun caar (x)
   "Return the car of the car of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (car x)))
 
 (defun cadr (x)
   "Return the car of the cdr of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (cdr x)))
 
 (defun cdar (x)
   "Return the cdr of the car of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (car x)))
 
 (defun cddr (x)
   "Return the cdr of the cdr of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (cdr x)))
 
 (defun caaar (x)
   "Return the `car' of the `car' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (car (car x))))
 
 (defun caadr (x)
   "Return the `car' of the `car' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (car (cdr x))))
 
 (defun cadar (x)
   "Return the `car' of the `cdr' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (cdr (car x))))
 
 (defun caddr (x)
   "Return the `car' of the `cdr' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (cdr (cdr x))))
 
 (defun cdaar (x)
   "Return the `cdr' of the `car' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (car (car x))))
 
 (defun cdadr (x)
   "Return the `cdr' of the `car' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (car (cdr x))))
 
 (defun cddar (x)
   "Return the `cdr' of the `cdr' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (cdr (car x))))
 
 (defun cdddr (x)
   "Return the `cdr' of the `cdr' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (cdr (cdr x))))
 
 (defun caaaar (x)
   "Return the `car' of the `car' of the `car' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (car (car (car x)))))
 
 (defun caaadr (x)
   "Return the `car' of the `car' of the `car' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (car (car (cdr x)))))
 
 (defun caadar (x)
   "Return the `car' of the `car' of the `cdr' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (car (cdr (car x)))))
 
 (defun caaddr (x)
   "Return the `car' of the `car' of the `cdr' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (car (cdr (cdr x)))))
 
 (defun cadaar (x)
   "Return the `car' of the `cdr' of the `car' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (cdr (car (car x)))))
 
 (defun cadadr (x)
   "Return the `car' of the `cdr' of the `car' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (cdr (car (cdr x)))))
 
 (defun caddar (x)
   "Return the `car' of the `cdr' of the `cdr' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (cdr (cdr (car x)))))
 
 (defun cadddr (x)
   "Return the `car' of the `cdr' of the `cdr' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (car (cdr (cdr (cdr x)))))
 
 (defun cdaaar (x)
   "Return the `cdr' of the `car' of the `car' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (car (car (car x)))))
 
 (defun cdaadr (x)
   "Return the `cdr' of the `car' of the `car' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (car (car (cdr x)))))
 
 (defun cdadar (x)
   "Return the `cdr' of the `car' of the `cdr' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (car (cdr (car x)))))
 
 (defun cdaddr (x)
   "Return the `cdr' of the `car' of the `cdr' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (car (cdr (cdr x)))))
 
 (defun cddaar (x)
   "Return the `cdr' of the `cdr' of the `car' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (cdr (car (car x)))))
 
 (defun cddadr (x)
   "Return the `cdr' of the `cdr' of the `car' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (cdr (car (cdr x)))))
 
 (defun cdddar (x)
   "Return the `cdr' of the `cdr' of the `cdr' of the `car' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (cdr (cdr (car x)))))
 
 (defun cddddr (x)
   "Return the `cdr' of the `cdr' of the `cdr' of the `cdr' of X."
-  (declare (compiler-macro internal--compiler-macro-cXXr))
+  (declare (side-effect-free t)
+           (compiler-macro internal--compiler-macro-cXXr))
   (cdr (cdr (cdr (cdr x)))))
 
 (defun last (list &optional n)
@@ -2038,6 +2077,10 @@ instead; it will indirectly limit the specpdl stack size as well.")
 
 (define-obsolete-function-alias 'fetch-bytecode #'ignore "30.1")
 
+(define-obsolete-function-alias 'purecopy #'identity "31.1")
+
+(make-obsolete-variable 'pure-bytes-used "no longer used." "31.1")
+
 
 ;;;; Alternate names for functions - these are not being phased out.
 
@@ -2643,18 +2686,25 @@ SYMBOL is checked for nil."
 (defmacro when-let* (varlist &rest body)
   "Bind variables according to VARLIST and conditionally evaluate BODY.
 Evaluate each binding in turn, stopping if a binding value is nil.
-If all are non-nil, return the value of the last form in BODY.
+If all are non-nil, evaluate the forms in BODY
+and return the value of the last form.
 
 The variable list VARLIST is the same as in `if-let*'.
 
 See also `and-let*'."
   (declare (indent 1) (debug if-let*))
-  (list 'if-let* varlist (macroexp-progn body)))
+  (let ((res (list 'if-let* varlist (macroexp-progn body))))
+    (if body res
+      (macroexp-warn-and-return "Empty body" res 'empty-body))))
 
 (defmacro and-let* (varlist &rest body)
   "Bind variables according to VARLIST and conditionally evaluate BODY.
-Like `when-let*', except if BODY is empty and all the bindings
-are non-nil, then the result is the value of the last binding.
+Evaluate each binding in turn, stopping if a binding value is nil.
+If all bindings are non-nil, evaluate the forms in BODY
+and return the value of the last form, or else the last binding value
+if BODY is empty.
+
+Like `when-let*', except for the handling of an empty BODY.
 
 Some Lisp programmers follow the convention that `and' and `and-let*'
 are for forms evaluated for return value, and `when' and `when-let*' are
@@ -2690,7 +2740,8 @@ binding."
 (defmacro when-let (spec &rest body)
   "Bind variables according to SPEC and conditionally evaluate BODY.
 Evaluate each binding in turn, stopping if a binding value is nil.
-If all are non-nil, return the value of the last form in BODY.
+If all are non-nil, evaluate the forms in BODY
+and return the value of the last form.
 
 The variable list SPEC is the same as in `if-let'."
   (declare (indent 1) (debug if-let)
@@ -3535,13 +3586,15 @@ causes it to evaluate `help-form' and display the result."
     char))
 
 (defun sit-for (seconds &optional nodisp)
-  "Redisplay, then wait for SECONDS seconds.  Stop when input is available.
+  "Redisplay, then wait for SECONDS seconds; stop when input is available.
 SECONDS may be a floating-point value.
 \(On operating systems that do not support waiting for fractions of a
 second, floating-point values are rounded down to the nearest integer.)
 
-If optional arg NODISP is t, don't redisplay, just wait for input.
-Redisplay does not happen if input is available before it starts.
+If there's pending input, return nil immediately without redisplaying
+and without waiting.
+If optional arg NODISP is t, don't redisplay, just wait for input (but
+still return nil immediately if there's pending input).
 
 Value is t if waited the full time with no input arriving, and nil otherwise."
   ;; This used to be implemented in C until the following discussion:
@@ -5961,7 +6014,7 @@ See also `with-eval-after-load'."
   ;; evaluating it now).
   (let* ((regexp-or-feature
 	  (if (stringp file)
-              (setq file (purecopy (load-history-regexp file)))
+              (setq file (load-history-regexp file))
             file))
 	 (elt (assoc regexp-or-feature after-load-alist))
          (func
@@ -7127,7 +7180,7 @@ Also, \"-GIT\", \"-CVS\" and \"-NNN\" are treated as snapshot versions."
 
 (defvar package--builtin-versions
   ;; Mostly populated by loaddefs.el.
-  (purecopy `((emacs . ,(version-to-list emacs-version))))
+  `((emacs . ,(version-to-list emacs-version)))
   "Alist giving the version of each versioned builtin package.
 I.e. each element of the list is of the form (NAME . VERSION) where
 NAME is the package name as a symbol, and VERSION is its version

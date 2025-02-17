@@ -386,7 +386,7 @@ during splitting, which may be slow."
 
 (defun nnimap-make-process-buffer (buffer)
   (with-current-buffer
-      (generate-new-buffer (format " *nnimap %s %s %S*"
+      (generate-new-buffer (format " *nnimap %s %s %s*"
 				   nnimap-address nnimap-server-port
                                    buffer))
     (mm-disable-multibyte)
@@ -2004,7 +2004,7 @@ Return the server's response to the SELECT or EXAMINE command."
 	(cons t response)
       (nnheader-report 'nnimap "%s"
 		       (mapconcat (lambda (a)
-				    (format "%s" a))
+				    (format "%S" a))
 				  (car response) " "))
       nil)))
 

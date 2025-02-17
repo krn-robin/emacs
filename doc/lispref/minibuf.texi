@@ -671,6 +671,7 @@ function, this automatic addition is disabled, and you can also set
 this variable to your own function which adds only some candidates, or
 some other values, to the ``future history''.
 
+@cindex @code{history-length} (symbol property)
   Emacs functions that add a new element to a history list can also
 delete old elements if the list gets too long.  The variable
 @code{history-length} specifies the maximum length for most history
@@ -1241,6 +1242,16 @@ different function to completely override the normal behavior of
 @code{completing-read}.
 @end defvar
 
+@findex completing-read-multiple
+@vindex crm-separator
+If you need to prompt the user for several strings, like several
+elements of a list or several parameters (e.g., user, host, and port) of
+a connection, you can use @code{completing-read-multiple}.  It allows
+typing several strings separated by a separator string (by default, tabs
+and commas; customize @code{crm-separator} to change that), and provides
+completion for each individual string the user types.  It returns the
+strings that were read, as a list.
+
 @node Completion Commands
 @subsection Minibuffer Commands that Do Completion
 
@@ -1704,7 +1715,7 @@ If this variable is non-@code{nil}, @code{read-file-name} ignores case
 when performing completion.
 @end defopt
 
-@defun read-directory-name prompt &optional directory default require-match initial
+@defun read-directory-name prompt &optional directory default require-match initial predicate
 This function is like @code{read-file-name} but allows only directory
 names as completion alternatives.
 
@@ -1889,7 +1900,7 @@ The function to add prefixes and suffixes to completions.
 @end table
 
 @noindent
-See @ref{Programmed Completion}, for a complete list of metadata entries.
+@xref{Programmed Completion}, for a complete list of metadata entries.
 @end defopt
 
 @defvar completion-extra-properties

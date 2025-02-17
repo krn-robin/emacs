@@ -102,7 +102,7 @@
 ;; the absolute format (see e.g. `calendar-iso-from-absolute' in
 ;; cal-iso.el).  This representation is also useful for certain
 ;; calculations; e.g. `calendar-day-of-week' is simply the absolute
-;; represention modulo 7, because December 31, 1BC is a Sunday.
+;; representation modulo 7, because December 31, 1BC is a Sunday.
 
 ;; A note on free variables:
 
@@ -2354,7 +2354,8 @@ returned is (month year)."
                        (completion-table-with-metadata
                         (completion-table-case-fold
                          (append month-array nil))
-                        `((category . calendar-month)))
+                        `((category . calendar-month)
+                          (display-sort-function . identity)))
                        nil t nil nil defmon)
                       (calendar-make-alist month-array 1) t)))
          (defday (calendar-extract-day default-date))

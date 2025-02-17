@@ -558,9 +558,9 @@ Otherwise, the value is whatever the function
 
 (defun Man-shell-file-name ()
   "Return a proper shell file name, respecting remote directories."
-  (or ; This works also in the local case.
+  (if (connection-local-p shell-file-name)
       (connection-local-value shell-file-name)
-      "/bin/sh"))
+    "/bin/sh"))
 
 (defun Man-header-file-path ()
   "Return the C header file search path that Man should use.
@@ -1291,6 +1291,7 @@ Return the buffer in which the manpage will appear."
   (when (window-live-p window)
     (with-current-buffer (window-buffer window)
       (when (and (derived-mode-p 'Man-mode)
+                 Man-columns
                  (not (eq Man-columns (Man-columns))))
         (let ((proc (get-buffer-process (current-buffer))))
           (unless (and proc (not (eq (process-status proc) 'exit)))
