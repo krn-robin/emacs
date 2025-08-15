@@ -37,7 +37,8 @@
 
 (add-to-list
  'treesit-language-source-alist
- '(yaml "https://github.com/tree-sitter-grammars/tree-sitter-yaml" "v0.7.0")
+ '(yaml "https://github.com/tree-sitter-grammars/tree-sitter-yaml"
+        :commit "b733d3f5f5005890f324333dd57e1f0badec5c87")
  t)
 
 (defvar yaml-ts-mode--syntax-table
@@ -186,7 +187,7 @@ Return nil if there is no name or if NODE is not a defun node."
     ;; Comments.
     (setq-local comment-start "# ")
     (setq-local comment-end "")
-    (setq-local comment-start-skip "#+\\s-*")
+    (setq-local comment-start-skip "#+ *")
 
     ;; Indentation.
     (setq-local indent-tabs-mode nil)
@@ -226,8 +227,21 @@ Return nil if there is no name or if NODE is not a defun node."
 
 (derived-mode-add-parents 'yaml-ts-mode '(yaml-mode))
 
-(if (treesit-ready-p 'yaml)
-    (add-to-list 'auto-mode-alist '("\\.ya?ml\\'" . yaml-ts-mode)))
+;;;###autoload
+(defun yaml-ts-mode-maybe ()
+  "Enable `yaml-ts-mode' when its grammar is available."
+  (if (or (treesit-language-available-p 'yaml)
+          (eq treesit-enabled-modes t)
+          (memq 'yaml-ts-mode treesit-enabled-modes))
+      (yaml-ts-mode)
+    (fundamental-mode)))
+
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'auto-mode-alist '("\\.ya?ml\\'" . yaml-ts-mode-maybe))
+  ;; To be able to toggle between an external package and core ts-mode:
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(yaml-mode . yaml-ts-mode)))
 
 (provide 'yaml-ts-mode)
 

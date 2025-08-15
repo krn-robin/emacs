@@ -241,14 +241,14 @@ The following place holders should be present in the string:
 Default t means all, otherwise an integer specifying the maximum
 number to show.  A text button is always shown allowing you to
 toggle display of the entire list."
-  :type '(choice (const :tag "All" t)
+  :type `(choice (const :tag "All" t)
                  (integer :tag "Limit"
                           :validate
-                          (lambda (widget)
-                            (unless (>= (widget-value widget) 0)
-                              (widget-put widget :error
-                                          "Invalid value: must be a non-negative integer")
-                              widget))))
+                          ,(lambda (widget)
+                             (unless (>= (widget-value widget) 0)
+                               (widget-put widget :error
+                                           "Invalid value: must be a non-negative integer")
+                               widget))))
   :version "27.1")
 
 (defcustom vc-git-revision-complete-only-branches nil
@@ -1144,8 +1144,7 @@ It is based on `log-edit-mode', and has Git-specific extensions."
 (defalias 'vc-git-async-checkins #'always)
 
 (defun vc-git-checkin (files comment &optional _rev)
-  (let* ((parent (current-buffer))
-         (file1 (or (car files) default-directory))
+  (let* ((file1 (or (car files) default-directory))
          (root (vc-git-root file1))
          (default-directory (expand-file-name root))
          (only (or (cdr files)
@@ -1273,11 +1272,9 @@ It is based on `log-edit-mode', and has Git-specific extensions."
                  (with-current-buffer buffer
                    (vc-run-delayed
                      (vc-compilation-mode 'git)
-                     (funcall post)
-                     (when (buffer-live-p parent)
-                       (with-current-buffer parent
-                         (run-hooks 'vc-checkin-hook)))))
-                 (vc-set-async-update buffer))
+                     (funcall post)))
+                 (vc-set-async-update buffer)
+                 (list 'async (get-buffer-process buffer)))
         (apply #'vc-git-command nil 0 files args)
         (funcall post)))))
 
@@ -1339,10 +1336,8 @@ It is based on `log-edit-mode', and has Git-specific extensions."
 	    (if (string= fn "")
 		(file-relative-name file (vc-git-root default-directory))
 	      (substring fn 0 -1)))))
-    (vc-git-command
-     buffer 0
-     nil
-     "cat-file" "blob" (concat (if rev rev "HEAD") ":" fullname))))
+    (vc-git-command buffer 0 nil "cat-file" "--filters"
+                    (concat (or rev "HEAD") ":" fullname))))
 
 (defun vc-git-find-ignore-file (file)
   "Return the git ignore file that controls FILE."
@@ -1560,7 +1555,7 @@ If SHORTLOG is non-nil, use a short format based on `vc-git-root-log-format'.
 \(This requires at least Git version 1.5.6, for the --graph option.)
 If START-REVISION is non-nil, it is the newest revision to show.
 If LIMIT is a number, show no more than this many entries.
-If LIMIT is a revision string, use it as an end-revision."
+If LIMIT is a non-empty string, use it as a base revision."
   (let ((coding-system-for-read
          (or coding-system-for-read vc-git-log-output-coding-system)))
     ;; `vc-do-command' creates the buffer, but we need it before running
@@ -1568,7 +1563,19 @@ If LIMIT is a revision string, use it as an end-revision."
     (vc-setup-buffer buffer)
     ;; If the buffer exists from a previous invocation it might be
     ;; read-only.
-    (let ((inhibit-read-only t))
+    (let ((inhibit-read-only t)
+          ;; In some parts of Git's revision and revision range
+          ;; notation, an empty string is equivalent to "HEAD", but not
+          ;; everywhere.  For simplicity we'll always be explicit.
+          (start-revision (if (member start-revision '(nil ""))
+                              "HEAD"
+                            start-revision))
+          ;; An empty string LIMIT doesn't make sense given the
+          ;; specification of this VC backend function, and is tricky to
+          ;; deal with in combination with Git's double-dot notation for
+          ;; specifying revision ranges.  So discard it right away.
+          (limit (and (not (equal limit ""))
+                      limit)))
       (with-current-buffer buffer
 	(apply #'vc-git-command buffer
 	       'async files
@@ -1591,14 +1598,11 @@ If LIMIT is a revision string, use it as an end-revision."
                  (if shortlog vc-git-shortlog-switches vc-git-log-switches))
                 (when (numberp limit)
                   (list "-n" (format "%s" limit)))
-		(when start-revision
-                  (if (and limit (not (numberp limit)))
-                      (list (concat start-revision ".." (if (equal limit "")
-                                                            "HEAD"
-                                                          limit)))
-                    (list start-revision)))
                 (when (eq vc-log-view-type 'with-diff)
                   (list "-p"))
+                (list (concat (and (stringp limit)
+                                   (concat limit ".."))
+                              start-revision))
 		'("--")))))))
 
 (defun vc-git-incoming-revision (remote-location)
@@ -1805,16 +1809,21 @@ This requires git 1.8.4 or later, for the \"-L\" option of \"git log\"."
                                 samp coding-system-for-read t)))
     (setq coding-system-for-read 'undecided)))
 
+(defconst vc-git--empty-tree "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+  "Git object ID of the empty tree object.")
+
 (defun vc-git-diff (files &optional rev1 rev2 buffer async)
   "Get a difference report using Git between two revisions of FILES."
   (let (process-file-side-effects
         (command "diff-tree"))
     (vc-git--asciify-coding-system)
     (if rev2
-        ;; Diffing against the empty tree.
-        (unless rev1 (setq rev1 "4b825dc642cb6eb9a060e54bf8d69288fbee4904"))
+        (unless rev1 (setq rev1 vc-git--empty-tree))
       (setq command "diff-index")
-      (unless rev1 (setq rev1 "HEAD")))
+      (unless rev1
+        ;; If there aren't any commits yet then there is no HEAD.
+        ;; So diff against the empty tree object.
+        (setq rev1 (if (vc-git--empty-db-p) vc-git--empty-tree "HEAD"))))
     (if vc-git-diff-switches
         (apply #'vc-git-command (or buffer "*vc-diff*")
                (if async 'async 1)
@@ -1904,12 +1913,15 @@ This requires git 1.8.4 or later, for the \"-L\" option of \"git log\"."
 (declare-function vc-read-revision "vc"
                   (prompt &optional files backend default initial-input))
 
+(defun vc-git--read-start-point (&optional dir)
+  (let ((branch (car (vc-git-branches))))
+    (vc-read-revision (format-prompt "Start point" branch)
+                      (list (or dir (vc-git-root default-directory)))
+                      'Git branch)))
+
 (defun vc-git-create-tag (dir name branchp)
   (let ((default-directory dir)
-        (start-point (when branchp (vc-read-revision
-                                    (format-prompt "Start point"
-                                                   (car (vc-git-branches)))
-                                    (list dir) 'Git (car (vc-git-branches))))))
+        (start-point (and branchp (vc-git--read-start-point dir))))
     (and (or (zerop (vc-git-command nil t nil "update-index" "--refresh"))
              (y-or-n-p "Modified files exist.  Proceed? ")
              (user-error (format "Can't create %s with modified files"
@@ -1928,13 +1940,18 @@ This requires git 1.8.4 or later, for the \"-L\" option of \"git log\"."
 
 ;;; MISCELLANEOUS
 
+(defsubst vc-git--maybe-abbrev ()
+  (if vc-use-short-revision "--abbrev-commit" "--no-abbrev-commit"))
+
 (defun vc-git-previous-revision (file rev)
   "Git-specific version of `vc-previous-revision'."
   (if file
       (let* ((fname (file-relative-name file))
              (prev-rev (with-temp-buffer
                          (and
-                          (vc-git--out-ok "rev-list" "-2" rev "--" fname)
+                          (vc-git--out-ok "rev-list"
+                                          (vc-git--maybe-abbrev)
+                                          "-2" rev "--" fname)
                           (goto-char (point-max))
                           (bolp)
                           (zerop (forward-line -1))
@@ -1965,7 +1982,9 @@ This requires git 1.8.4 or later, for the \"-L\" option of \"git log\"."
          (current-rev
           (with-temp-buffer
             (and
-             (vc-git--out-ok "rev-list" "-1" rev "--" file)
+             (vc-git--out-ok "rev-list"
+                             (vc-git--maybe-abbrev)
+                             "-1" rev "--" file)
              (goto-char (point-max))
              (bolp)
              (zerop (forward-line -1))
@@ -1977,7 +1996,9 @@ This requires git 1.8.4 or later, for the \"-L\" option of \"git log\"."
           (and current-rev
                (with-temp-buffer
                  (and
-                  (vc-git--out-ok "rev-list" "HEAD" "--" file)
+                  (vc-git--out-ok "rev-list"
+                                  (vc-git--maybe-abbrev)
+                                  "HEAD" "--" file)
                   (goto-char (point-min))
                   (search-forward current-rev nil t)
                   (zerop (forward-line -1))
@@ -2049,6 +2070,10 @@ Will not rewrite likely-public history; see option `vc-allow-rewriting-published
 
 (defun vc-git-modify-change-comment (files rev comment)
   (vc-git--assert-allowed-rewrite rev)
+  (when (zerop (vc-git--call nil "rev-parse" (format "%s^2" rev)))
+    ;; This amend! approach doesn't work for merge commits.
+    ;; Error out now instead of leaving an amend! commit hanging.
+    (error "Cannot modify merge commit comments"))
   (let* ((args (delete "--amend"
                        (vc-git--log-edit-extract-headers comment)))
          (message (format "amend! %s\n\n%s" rev (pop args)))
@@ -2056,10 +2081,6 @@ Will not rewrite likely-public history; see option `vc-allow-rewriting-published
           ;; On MS-Windows, pass the message through a file, to work
           ;; around how command line arguments must be in the system
           ;; codepage, and therefore might not support non-ASCII.
-          ;;
-          ;; As our other arguments are static, we need not be concerned
-          ;; about the encoding of command line arguments in general.
-          ;; See `vc-git-checkin' for the more complex case.
           (and (eq system-type 'windows-nt)
                (let ((default-directory
                       (or (file-name-directory (or (car files)
@@ -2097,12 +2118,18 @@ Rebase may --autosquash your other squash!/fixup!/amend!; proceed?")))
               (write-region message nil msg-file)))
           ;; Regardless of the state of the index and working tree, this
           ;; will always create an empty commit, thanks to --only.
-          (apply #'vc-git-command nil 0 nil
-                 "commit" "--only" "--allow-empty"
-                 (nconc (if msg-file
-                            (list "-F" (file-local-name msg-file))
-                          (list "-m" message))
-                        args)))
+          (let ((coding-system-for-write
+                 ;; On MS-Windows, we must encode command-line arguments in
+                 ;; the system codepage.
+                 (if (eq system-type 'windows-nt)
+                     locale-coding-system
+                   coding-system-for-write)))
+            (apply #'vc-git-command nil 0 nil
+                   "commit" "--only" "--allow-empty"
+                   (nconc (if msg-file
+                              (list "-F" (file-local-name msg-file))
+                            (list "-m" message))
+                          args))))
       (when (and msg-file (file-exists-p msg-file))
         (delete-file msg-file))))
   (with-environment-variables (("GIT_SEQUENCE_EDITOR" "true"))
@@ -2322,7 +2349,7 @@ In other modes, call `vc-deduce-fileset' to determine files to stash."
   (vc-resynch-buffer (vc-git-root default-directory) t t))
 
 (defun vc-git-stash-list ()
-  (when-let* ((out (vc-git--run-command-string nil "stash" "list")))
+  (and-let* ((out (vc-git--run-command-string nil "stash" "list")))
     (split-string
      (replace-regexp-in-string
       "^stash@" "             " out)
@@ -2371,6 +2398,91 @@ In other modes, call `vc-deduce-fileset' to determine files to stash."
   (interactive "e")
   (vc-dir-at-event e (popup-menu vc-git-stash-menu-map e)))
 
+(defun vc-git--worktrees ()
+  "Return an alist of alists regarding this repository's worktrees.
+The keys into the outer alist are the worktree root directories; so,
+there is one inner alist for each worktree.  The keys and values of each
+inner alist are the worktree attributes returned by `git worktree list';
+see the \"LIST OUTPUT FORMAT\" section of the git-worktree(1) manual
+page for the meanings of these attributes."
+  (with-temp-buffer
+    (vc-git-command nil 0 nil "worktree" "prune")
+    (let ((have-worktree-list-porcelain-z
+           ;; The -z option to 'worktree list --porcelain' appeared in 2.36
+           (version<= "2.36" (vc-git--program-version))))
+      (vc-git-command t 0 nil "worktree" "list" "--porcelain"
+                      (and have-worktree-list-porcelain-z "-z"))
+      (let (worktrees current-root current-rest)
+        (goto-char (point-min))
+        (while
+            (re-search-forward
+             (if have-worktree-list-porcelain-z
+                 "\\=\\(\\([a-zA-Z]+\\)\\(?: \\([^\0]+\\)\\)?\\)?\0"
+               "\\=\\(\\([a-zA-Z]+\\)\\(?: \\([^\n]+\\)\\)?\\)?\n")
+             nil t)
+          (if (match-string 1)
+              (let ((k (intern (match-string 2)))
+                    (v (or (match-string 3) t)))
+                (cond ((and (not current-root) (eq k 'worktree))
+                       (setq current-root (file-name-as-directory v)))
+                      ((not (eq k 'worktree))
+                       (push (cons k v) current-rest))
+                      (t
+                       (error "'git worktree' output parse error"))))
+            (push (cons current-root current-rest) worktrees)
+            (setq current-root nil current-rest nil)))
+        (or worktrees
+            (error "'git worktree' output parse error"))))))
+
+(defun vc-git-known-other-working-trees ()
+  "Implementation of `known-other-working-trees' backend function for Git."
+  (cl-loop with root = (file-truename
+                        (expand-file-name (vc-git-root default-directory)))
+           for (worktree) in (vc-git--worktrees)
+           unless (equal worktree root)
+           collect (abbreviate-file-name worktree)))
+
+(defun vc-git-add-working-tree (directory)
+  "Implementation of `add-working-tree' backend function for Git."
+  (letrec ((dir (expand-file-name directory))
+           (vc-filter-command-function #'list) ; see `vc-read-revision'
+           (revs (vc-git-revision-table nil))
+           (table (lazy-completion-table table (lambda () revs)))
+           (branch (completing-read (format-prompt "New or existing branch"
+                                                   "latest revision, detached")
+                                    table nil nil nil 'vc-revision-history))
+           (args (cond ((string-empty-p branch)
+                        (list "--detach" dir))
+                       ((member branch revs)
+                        (list dir branch))
+                       (t
+                        (list "-b" branch dir (vc-git--read-start-point))))))
+    (apply #'vc-git-command nil 0 nil "worktree" "add" args)))
+
+(defun vc-git-delete-working-tree (directory)
+  "Implementation of `delete-working-tree' backend function for Git."
+  ;; Avoid assuming we have 'git worktree remove' which older Git lacks.
+  (delete-directory directory t t)
+  (vc-git-command nil 0 nil "worktree" "prune"))
+
+(defun vc-git-move-working-tree (from to)
+  "Implementation of `move-working-tree' backend function for Git."
+  (let ((v (vc-git--program-version)))
+    (cond ((version<= "2.29" v)
+           ;; 'git worktree move' can't move the main worktree,
+           ;; but moving and then repairing can.
+           (rename-file from (directory-file-name to) 1)
+           (let ((default-directory to))
+             (vc-git-command nil 0 nil "worktree" "repair")))
+          ((version<= "2.17" v)
+           ;; We lack 'git worktree repair' but have 'git worktree move'.
+           (vc-git-command nil 0 nil "worktree" "move"
+                           (expand-file-name from)
+                           (expand-file-name to)))
+          (t
+           ;; We don't even have 'git worktree move'.
+           (error "Your Git is too old to relocate other working trees")))))
+
 
 ;;; Internal commands
 
@@ -2389,7 +2501,7 @@ The difference to `vc-do-command' is that this function always invokes
                 '("GIT_LITERAL_PATHSPECS=1"))
             ;; Avoid repository locking during background operations
             ;; (bug#21559).
-            ,@(when revert-buffer-in-progress-p
+            ,@(when revert-buffer-in-progress
                 '("GIT_OPTIONAL_LOCKS=0")))
           process-environment)))
     (apply #'vc-do-command (or buffer "*vc*") okstatus vc-git-program
@@ -2428,7 +2540,7 @@ The difference to `vc-do-command' is that this function always invokes
                 '("GIT_LITERAL_PATHSPECS=1"))
 	    ;; Avoid repository locking during background operations
 	    ;; (bug#21559).
-	    ,@(when revert-buffer-in-progress-p
+	    ,@(when revert-buffer-in-progress
 		'("GIT_OPTIONAL_LOCKS=0")))
 	  process-environment)))
     (apply #'process-file vc-git-program nil buffer nil "--no-pager" command args)))

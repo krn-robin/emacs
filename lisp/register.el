@@ -30,13 +30,13 @@
 ;; documented in the Emacs user's manual: (info "(emacs) Registers").
 
 (eval-when-compile (require 'cl-lib))
+(eval-when-compile (require 'cl-macs))  ;For `cl--find-class'.
 
 ;;; Code:
 
 ;; FIXME: Clean up namespace usage!
 
 (declare-function dired-current-directory "dired")
-(declare-function cl-find-class "cl-extra")
 
 (cl-defstruct
   (registerv (:constructor nil)
@@ -73,7 +73,7 @@ A list of the form (file . FILE-NAME) represents the file named FILE-NAME.
 A list of the form (file-query FILE-NAME POSITION) represents
  position POSITION in the file named FILE-NAME, but query before
  visiting it.
-A list of the form (buffer . BUFFER-NAME) represents the buffer BUFFER-NAME.
+A list of the form (buffer . BUFFER) represents the named BUFFER.
 A list of the form (WINDOW-CONFIGURATION POSITION)
  represents a saved window configuration plus a saved value of point.
 A list of the form (FRAME-CONFIGURATION POSITION)
@@ -520,7 +520,7 @@ Interactively, prompt for REGISTER using `register-read-with-preview'."
   "Go to location stored in REGISTER, or restore configuration stored there.
 Push the mark if going to the location moves point, unless called in succession.
 If the register contains a file name, find that file.
-If the register contains a buffer name, switch to that buffer.
+If the register references a buffer, switch to that buffer.
 If the register contains a window configuration (one frame) or a frameset
 \(all frames), restore the configuration of that frame or of all frames
 accordingly.
@@ -578,7 +578,7 @@ With a prefix argument, prompt for BUFFER as well."
 
 (defun register--get-method-type (val genfun &optional other-args-type)
   (let* ((type (cl-type-of val))
-	 (types (cl--class-allparents (cl-find-class type))))
+	 (types (cl--class-allparents (cl--find-class type))))
     (while (and types (not (cl-find-method genfun nil
                                            (cons (car types) other-args-type))))
       (setq types (cdr types)))

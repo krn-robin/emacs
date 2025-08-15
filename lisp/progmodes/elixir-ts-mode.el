@@ -23,12 +23,12 @@
 
 ;;; Tree-sitter language versions
 ;;
-;; elixir-ts-mode is known to work with the following languages and version:
-;; - tree-sitter-heex: v0.7.0
+;; elixir-ts-mode has been tested with the following grammars and version:
 ;; - tree-sitter-elixir: v0.3.3
+;; - tree-sitter-heex: v0.7.0
 ;;
 ;; We try our best to make builtin modes work with latest grammar
-;; versions, so a more recent grammar version has a good chance to work.
+;; versions, so a more recent grammar has a good chance to work too.
 ;; Send us a bug report if it doesn't.
 
 ;;; Commentary:
@@ -59,11 +59,13 @@
 
 (add-to-list
  'treesit-language-source-alist
- '(elixir "https://github.com/elixir-lang/tree-sitter-elixir" "v0.3.3")
+ '(elixir "https://github.com/elixir-lang/tree-sitter-elixir"
+          :commit "02a6f7fd4be28dd94ee4dd2ca19cb777053ea74e")
  t)
 (add-to-list
  'treesit-language-source-alist
- '(heex "https://github.com/phoenixframework/tree-sitter-heex" "v0.7.0")
+ '(heex "https://github.com/phoenixframework/tree-sitter-heex"
+        :commit "f6b83f305a755cd49cf5f6a66b2b789be93dc7b9")
  t)
 
 (defgroup elixir-ts nil
@@ -804,12 +806,24 @@ Return nil if NODE is not a defun node or doesn't have a name."
 
 (derived-mode-add-parents 'elixir-ts-mode '(elixir-mode))
 
-(if (treesit-ready-p 'elixir)
-    (progn
-      (add-to-list 'auto-mode-alist '("\\.elixir\\'" . elixir-ts-mode))
-      (add-to-list 'auto-mode-alist '("\\.ex\\'" . elixir-ts-mode))
-      (add-to-list 'auto-mode-alist '("\\.exs\\'" . elixir-ts-mode))
-      (add-to-list 'auto-mode-alist '("mix\\.lock" . elixir-ts-mode))))
+;;;###autoload
+(defun elixir-ts-mode-maybe ()
+  "Enable `elixir-ts-mode' when its grammar is available."
+  (if (or (treesit-language-available-p 'elixir)
+          (eq treesit-enabled-modes t)
+          (memq 'elixir-ts-mode treesit-enabled-modes))
+      (elixir-ts-mode)
+    (fundamental-mode)))
+
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'auto-mode-alist '("\\.elixir\\'" . elixir-ts-mode-maybe))
+  (add-to-list 'auto-mode-alist '("\\.ex\\'" . elixir-ts-mode-maybe))
+  (add-to-list 'auto-mode-alist '("\\.exs\\'" . elixir-ts-mode-maybe))
+  (add-to-list 'auto-mode-alist '("mix\\.lock" . elixir-ts-mode-maybe))
+  ;; To be able to toggle between an external package and core ts-mode:
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(elixir-mode . elixir-ts-mode)))
 
 (provide 'elixir-ts-mode)
 

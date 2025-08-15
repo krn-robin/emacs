@@ -448,15 +448,18 @@ See `describe-repeat-maps' for a list of all repeatable commands."
     (when repeat-keep-prefix
       (add-hook 'pre-command-hook 'repeat-pre-hook))
     (add-hook 'post-command-hook 'repeat-post-hook)
-    (let* ((keymaps nil)
-           (commands (all-completions
-                      "" obarray (lambda (s)
-                                   (and (commandp s)
-                                        (get s 'repeat-map)
-                                        (push (get s 'repeat-map) keymaps))))))
-      (message "Repeat mode is enabled for %d commands and %d keymaps; see `describe-repeat-maps'"
-               (length commands)
-               (length (delete-dups keymaps))))))
+    (when (called-interactively-p 'any)
+      (let* ((keymaps nil)
+             (commands (all-completions
+                        "" obarray
+                        (lambda (s)
+                          (and (commandp s)
+                               (get s 'repeat-map)
+                               (push (get s 'repeat-map) keymaps))))))
+        (message "Repeat mode is enabled for %d commands and %d keymaps; \
+see `describe-repeat-maps'"
+                 (length commands)
+                 (length (delete-dups keymaps)))))))
 
 (defun repeat--command-property (property)
   (or (and (symbolp this-command)
@@ -586,9 +589,16 @@ This function can be used to force exit of repetition while it's active."
                   (let ((key (car key-cmd))
                         (cmd (cdr key-cmd)))
                     (if-let* ((hint (and (symbolp cmd)
-                                         (get cmd 'repeat-hint))))
+                                         (get cmd 'repeat-hint)))
+                              (last (aref key (1- (length key)))))
                         ;; Reuse `read-multiple-choice' formatting.
-                        (cdr (rmc--add-key-description (list key hint)))
+                        (if (= (length key) 1)
+                            (cdr (rmc--add-key-description (list last hint)))
+                          (format "%s (%s)"
+                                  (propertize (key-description key)
+                                              'face 'read-multiple-choice-face)
+                                  (cdr (rmc--add-key-description
+                                        (list (event-basic-type last) hint)))))
                       (propertize (key-description key)
                                   'face 'read-multiple-choice-face))))
                 keys ", ")

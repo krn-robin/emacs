@@ -24,14 +24,14 @@
 
 ;;; Tree-sitter language versions
 ;;
-;; c-ts-mode is known to work with the following languages and version:
+;; c-ts-mode has been tested with the following grammars and version:
 ;; - tree-sitter-c: v0.23.4-1-g3aa2995
 ;;
-;; c++-ts-mode is known to work with the following languages and version:
+;; c++-ts-mode has been tested with the following grammars and version:
 ;; - tree-sitter-cpp: v0.23.4-1-gf41b4f6
 ;;
 ;; We try our best to make builtin modes work with latest grammar
-;; versions, so a more recent grammar version has a good chance to work.
+;; versions, so a more recent grammar has a good chance to work too.
 ;; Send us a bug report if it doesn't.
 
 ;;; Commentary:
@@ -65,11 +65,9 @@
 ;;
 ;;   will turn on the c++-ts-mode for C++ source files.
 ;;
-;; - If you have both C and C++ grammars installed, add
-;;
-;;     (load "c-ts-mode")
-;;
-;;   to your init file.
+;; - If you have both C and C++ grammars installed, customize
+;;   'treesit-enabled-modes' and select 'c-ts-mode',
+;;   'c++-mode', 'c-or-c++-mode'.
 ;;
 ;; You can also turn on these modes manually in a buffer.  Doing so
 ;; will set up Emacs to use the C/C++ modes defined here for other
@@ -88,15 +86,18 @@
 
 (add-to-list
  'treesit-language-source-alist
- '(c "https://github.com/tree-sitter/tree-sitter-c" "v0.23.4")
+ '(c "https://github.com/tree-sitter/tree-sitter-c"
+     :commit "3aa2995549d5d8b26928e8d3fa2770fd4327414e")
  t)
 (add-to-list
  'treesit-language-source-alist
- '(cpp "https://github.com/tree-sitter/tree-sitter-cpp" "v0.23.4")
+ '(cpp "https://github.com/tree-sitter/tree-sitter-cpp"
+       :commit "f41b4f66a42100be405f96bdc4ebc4a61095d3e8")
  t)
 (add-to-list
  'treesit-language-source-alist
- '(doxygen "https://github.com/tree-sitter-grammars/tree-sitter-doxygen" "v1.1.0")
+ '(doxygen "https://github.com/tree-sitter-grammars/tree-sitter-doxygen"
+           :commit "1e28054cb5be80d5febac082706225e42eff14e6")
  t)
 
 ;;; Custom variables
@@ -199,7 +200,7 @@ To set the default indent style globally, use
           (if (functionp style)
               (funcall style)
             (c-ts-mode--simple-indent-rules
-             (if (derived-mode-p 'c-ts-mode) 'c 'c++)
+             (if (derived-mode-p 'c-ts-mode) 'c 'cpp)
              style)))))
 
 (defcustom c-ts-mode-emacs-sources-support t
@@ -1484,8 +1485,10 @@ in your init files."
       (setq-local comment-end " */")
       ;; Indent.
       (setq-local treesit-simple-indent-rules
-                  (c-ts-mode--simple-indent-rules
-                   'c c-ts-mode-indent-style))
+                  (if (functionp c-ts-mode-indent-style)
+                      (funcall c-ts-mode-indent-style)
+                    (c-ts-mode--simple-indent-rules
+                     'c c-ts-mode-indent-style)))
       ;; (setq-local treesit-simple-indent-rules
       ;;             `((c . ,(alist-get 'gnu (c-ts-mode--indent-styles 'c)))))
       ;; Font-lock.
@@ -1557,8 +1560,10 @@ recommended to enable `electric-pair-mode' with this mode."
 
       ;; Indent.
       (setq-local treesit-simple-indent-rules
-                  (c-ts-mode--simple-indent-rules
-                   'cpp c-ts-mode-indent-style))
+                  (if (functionp c-ts-mode-indent-style)
+                      (funcall c-ts-mode-indent-style)
+                    (c-ts-mode--simple-indent-rules
+                     'cpp c-ts-mode-indent-style)))
 
       ;; Font-lock.
       (setq-local treesit-font-lock-settings
@@ -1668,21 +1673,14 @@ the code is C or C++, and based on that chooses whether to enable
            'c-ts-mode)))
     (funcall (major-mode-remap mode))))
 
-(when (treesit-ready-p 'cpp)
-  (setq major-mode-remap-defaults
-        (assq-delete-all 'c++-mode major-mode-remap-defaults))
-  (add-to-list 'major-mode-remap-defaults '(c++-mode . c++-ts-mode)))
-
-(when (treesit-ready-p 'c)
-  (setq major-mode-remap-defaults
-        (assq-delete-all 'c-mode major-mode-remap-defaults))
-  (add-to-list 'major-mode-remap-defaults '(c-mode . c-ts-mode)))
-
-(when (and (treesit-ready-p 'cpp)
-           (treesit-ready-p 'c))
-  (setq major-mode-remap-defaults
-        (assq-delete-all 'c-or-c++-mode major-mode-remap-defaults))
-  (add-to-list 'major-mode-remap-defaults '(c-or-c++-mode . c-or-c++-ts-mode)))
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(c-mode . c-ts-mode))
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(c++-mode . c++-ts-mode))
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(c-or-c++-mode . c-or-c++-ts-mode)))
 
 (provide 'c-ts-mode)
 (provide 'c++-ts-mode)

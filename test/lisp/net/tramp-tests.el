@@ -45,8 +45,8 @@
 ;; might be too heavy.  Setting $REMOTE_PARALLEL_PROCESSES to a proper
 ;; value less than 10 could help.
 
-;; This test suite obeys the environment variables $EMACS_HYDRA_CI and
-;; $EMACS_EMBA_CI, used on the Emacs CI/CD platforms.
+;; This test suite obeys the environment variable $EMACS_EMBA_CI, used
+;; on the Emacs CI/CD platforms.
 
 ;; The following test tags are used: `:expensive-test',
 ;; `:tramp-asynchronous-processes' and `:unstable'.
@@ -60,6 +60,7 @@
 (require 'dired-aux)
 (require 'tramp)
 (require 'ert-x)
+(require 'filenotify)
 (require 'tar-mode)
 (require 'trace)
 (require 'vc)
@@ -121,11 +122,7 @@
           (unless (and (null noninteractive) (file-directory-p "~/"))
             (setenv "HOME" temporary-file-directory))
           (format "/mock::%s" temporary-file-directory)))
-      "Temporary directory for remote file tests.")
-
-    ;; This should happen on hydra only.
-    (when (getenv "EMACS_HYDRA_CI")
-      (add-to-list 'tramp-remote-path 'tramp-own-remote-path))))
+      "Temporary directory for remote file tests.")))
 
 ;; Beautify batch mode.
 (when noninteractive
@@ -2436,8 +2433,7 @@ This checks also `file-name-as-directory', `file-name-directory',
   ;; Bug#10085.
   (when (tramp--test-enabled) ;; Packages like tramp-gvfs.el might be disabled.
     (dolist (non-essential '(nil t))
-      ;; We must clear `tramp-default-method'.  On hydra, it is "ftp",
-      ;; which ruins the tests.
+      ;; We must clear `tramp-default-method'.
       (let ((tramp-default-method
 	     (file-remote-p ert-remote-temporary-file-directory 'method))
 	    (host-port
@@ -3906,7 +3902,11 @@ This tests also `access-file', `file-readable-p',
 	    (when test-file-ownership-preserved-p
 	      (should (file-ownership-preserved-p tmp-name1 'group)))
 	    (setq attr (file-attributes tmp-name1))
-	    (should (eq (file-attribute-type attr) t)))
+	    (should (eq (file-attribute-type attr) t))
+	    ;; A trailing slash shouldn't harm.
+	    (should
+	     (equal (file-attributes tmp-name1)
+		    (file-attributes (file-name-as-directory tmp-name1)))))
 
 	;; Cleanup.
 	(ignore-errors (delete-directory tmp-name1 'recursive))
@@ -4142,7 +4142,12 @@ They might differ only in time attributes or directory size."
 	    ;; Check the COUNT arg.
 	    (setq attr (directory-files-and-attributes
 			tmp-name2 nil (rx bos "b") nil nil 1))
-	    (should (equal (mapcar #'car attr) '("bar"))))
+	    (should (equal (mapcar #'car attr) '("bar")))
+
+	    ;; A trailing slash shouldn't harm.
+	    (should
+	     (equal (file-attributes tmp-name2)
+		    (file-attributes (file-name-as-directory tmp-name2)))))
 
 	;; Cleanup.
 	(ignore-errors (delete-directory tmp-name1 'recursive))))))
@@ -4547,7 +4552,8 @@ This tests also `make-symbolic-link', `file-truename' and `add-name-to-file'."
   (skip-unless (tramp--test-enabled))
   (skip-unless
    (or (tramp--test-adb-p) (tramp--test-gvfs-p)
-       (tramp--test-sh-p) (tramp--test-sudoedit-p)))
+       (tramp--test-sh-p) (tramp--test-smb-p)
+       (tramp--test-sudoedit-p)))
 
   (dolist (quoted (if (tramp--test-expensive-test-p) '(nil t) '(nil)))
     (let ((tmp-name1 (tramp--test-make-temp-name nil quoted))
@@ -4560,9 +4566,10 @@ This tests also `make-symbolic-link', `file-truename' and `add-name-to-file'."
 	    (should (consp (file-attribute-modification-time
 			    (file-attributes tmp-name1))))
 	    ;; Skip the test, if the remote handler is not able to set
-	    ;; the correct time.
-	    ;; Some remote machines cannot resolve seconds.  So we use a minute.
-	    (skip-unless (set-file-times tmp-name1 (seconds-to-time 60)))
+	    ;; the correct time.  Some remote machines cannot resolve
+	    ;; seconds.  tramp-adb.el needs at least a day.
+	    (skip-unless
+	     (set-file-times tmp-name1 (seconds-to-time (* 24 60 60))))
 	    ;; Dumb remote shells without perl(1) or stat(1) are not
 	    ;; able to return the date correctly.  They say "don't know".
 	    (unless (time-equal-p
@@ -4572,7 +4579,7 @@ This tests also `make-symbolic-link', `file-truename' and `add-name-to-file'."
 	      (should
 	       (time-equal-p
                 (file-attribute-modification-time (file-attributes tmp-name1))
-		(seconds-to-time 60)))
+		(seconds-to-time (* 24 60 60))))
 	      ;; Setting the time for not existing files shall fail.
 	      (should-error
 	       (set-file-times tmp-name2)
@@ -5222,7 +5229,7 @@ This tests also `make-symbolic-link', `file-truename' and `add-name-to-file'."
       (unwind-protect
 	  (progn
 	    ;; We cannot use "/bin/true" and "/bin/false"; those paths
-	    ;; do not exist on hydra and on MS Windows.
+	    ;; do not exist on MS Windows.
 	    (should (zerop (process-file "true")))
 	    (should-not (zerop (process-file "false")))
 	    (should-not (zerop (process-file "binary-does-not-exist")))
@@ -7665,7 +7672,6 @@ This requires restrictions of file name syntax."
 (ert-deftest tramp-test41-special-characters ()
   "Check special characters in file names."
   (skip-unless (tramp--test-enabled))
-  (skip-unless (not (getenv "EMACS_HYDRA_CI"))) ; SLOW ~ 245s
   (skip-unless (not (tramp--test-rsync-p)))
   (skip-unless (not (tramp--test-rclone-p)))
   (skip-unless (not (or (eq system-type 'darwin) (tramp--test-macos-p))))
@@ -7744,7 +7750,6 @@ This requires restrictions of file name syntax."
 (ert-deftest tramp-test42-utf8 ()
   "Check UTF8 encoding in file names and file contents."
   (skip-unless (tramp--test-enabled))
-  (skip-unless (not (getenv "EMACS_HYDRA_CI"))) ; SLOW ~ 620s
   (skip-unless (not (tramp--test-container-p)))
   (skip-unless (not (tramp--test-rsync-p)))
   (skip-unless (not (tramp--test-scp-p)))
@@ -7902,17 +7907,12 @@ process sentinels.  They shall not disturb each other."
             (cond
              ((ignore-errors
                (string-to-number (getenv "REMOTE_PARALLEL_PROCESSES"))))
-	     ((getenv "EMACS_HYDRA_CI") 5)
              (t 10)))
 	   ;; PuTTY-based methods can only share up to 10 connections.
 	   (tramp-use-connection-share
 	    (if (and (tramp--test-putty-p) (>= number-proc 10))
 		'suppress (bound-and-true-p tramp-use-connection-share)))
-           ;; On hydra, timings are bad.
-           (timer-repeat
-            (cond
-             ((getenv "EMACS_HYDRA_CI") 10)
-             (t 1)))
+           (timer-repeat 1)
 	   ;; This is when all timers start.  We check inside the
 	   ;; timer function, that we don't exceed timeout.
 	   (timer-start (current-time))
@@ -8101,6 +8101,62 @@ process sentinels.  They shall not disturb each other."
     (should (string= tmp-name (dired-get-filename)))
     (delete-directory tmp-name)
     (delete-file (concat tmp-name ".tar.gz"))))
+
+;; More exhaustive tests are performed in filenotify-tests.el,
+;; selector "remote".
+(ert-deftest tramp-test46-file-notifications ()
+  "Check that Tramp handles file notifications."
+  :tags '(:unstable)
+  (skip-unless (tramp--test-enabled))
+  ;; filenotify.el was reworked in Emacs 31.
+  (skip-unless (tramp--test-emacs31-p))
+
+  (let* ((tmp-name (tramp--test-make-temp-name))
+	 ;(file-notify-debug t)
+	 (desc1
+	  (ignore-error file-notify-error
+	    (file-notify-add-watch
+	     tmp-name '(change attribute-change) #'ignore)))
+	 (desc2
+	  (ignore-error file-notify-error
+	    (file-notify-add-watch
+	     ert-remote-temporary-file-directory
+	     '(change attribute-change) #'ignore))))
+    (skip-unless (and desc1 desc2))
+
+    (unwind-protect
+	(progn
+	  (tramp--test-message "%S" desc1)
+	  (should-not (file-exists-p tmp-name))
+	  (should (file-notify-valid-p desc2))
+
+	  ;; Create the file.  `file-notify-valid-p' requires that the
+	  ;; watched file exists, so we cannot check it earlier for `desc1'.
+	  (write-region "foo" nil tmp-name)
+	  (should (file-exists-p tmp-name))
+	  (should (file-notify-valid-p desc1))
+	  ;; Modify.
+	  (write-region "foo" nil tmp-name)
+	  (should (file-exists-p tmp-name))
+	  ;; Delete.
+	  (delete-file tmp-name)
+	  (should-not (file-exists-p tmp-name))
+
+	  (while (read-event nil nil 0.1))
+	  ;; This has been stopped because the file was deleted.
+	  (should-not (file-notify-valid-p desc1))
+
+	  ;; This is still valid.
+	  (should (file-notify-valid-p desc2))
+	  (file-notify-rm-watch desc2)
+	  (should-not (file-notify-valid-p desc2)))
+
+      ;; Cleanup.
+      (ignore-errors (delete-file tmp-name))
+      ;; `file-notify-rm-all-watches' exists since Emacs 30.1.
+      ;; We don't want to see compiler warnings for older Emacsen.
+      (when (fboundp 'file-notify-rm-all-watches)
+	(with-no-warnings (file-notify-rm-all-watches))))))
 
 (ert-deftest tramp-test47-read-password ()
   "Check Tramp password handling."
@@ -8420,8 +8476,92 @@ process sentinels.  They shall not disturb each other."
 	;; Cleanup.
 	(ignore-errors (delete-file tmp-name))))))
 
+(defun tramp--test-operation (&optional _file)
+  "Test operation."
+  "Test operation")
+
+(defun tramp--handler-for-test-operation (&optional _file)
+  "Test operation handler."
+  "Test operation handler")
+
+(ert-deftest tramp-test49-external-backend-function ()
+  "Check that Tramp handles external functions for a given backend."
+  (skip-unless (tramp--test-enabled))
+  (skip-unless (not (tramp--test-ange-ftp-p)))
+
+  (let* ((file-name-handler
+	  (tramp-find-foreign-file-name-handler tramp-test-vec))
+	 (backend
+	  (intern
+	   (string-remove-suffix
+	    "-file-name-handler" (symbol-name file-name-handler)))))
+
+    ;; There is no backend specific code.
+    (should-not
+     (string-equal (tramp--test-operation ert-remote-temporary-file-directory)
+		   (tramp--handler-for-test-operation
+		    ert-remote-temporary-file-directory)))
+    (should-not
+     (string-equal (tramp--test-operation temporary-file-directory)
+		   (tramp--handler-for-test-operation
+		    temporary-file-directory)))
+    (let ((default-directory ert-remote-temporary-file-directory))
+      (should-not
+       (string-equal (tramp--test-operation)
+		     (tramp--handler-for-test-operation))))
+    (let ((default-directory temporary-file-directory))
+      (should-not
+       (string-equal (tramp--test-operation)
+		     (tramp--handler-for-test-operation))))
+
+    (should-error
+     (tramp-add-external-operation
+      #'tramp--test-operation
+      #'tramp--handler-for-test-operation 'foo)
+     :type 'file-missing)
+    (tramp-add-external-operation
+     #'tramp--test-operation
+     #'tramp--handler-for-test-operation backend)
+    ;; The backend specific function is called.
+    (should
+     (string-equal (tramp--test-operation ert-remote-temporary-file-directory)
+		   (tramp--handler-for-test-operation
+		    ert-remote-temporary-file-directory)))
+    (should-not
+     (string-equal (tramp--test-operation temporary-file-directory)
+		   (tramp--handler-for-test-operation
+		    temporary-file-directory)))
+    (let ((default-directory ert-remote-temporary-file-directory))
+      (should
+       (string-equal (tramp--test-operation)
+		     (tramp--handler-for-test-operation))))
+    (let ((default-directory temporary-file-directory))
+      (should-not
+       (string-equal (tramp--test-operation)
+		     (tramp--handler-for-test-operation))))
+
+    (tramp-remove-external-operation
+     #'tramp--test-operation backend)
+    ;; There is no backend specific code.
+    (should-not
+     (string-equal (tramp--test-operation ert-remote-temporary-file-directory)
+		   (tramp--handler-for-test-operation
+		    ert-remote-temporary-file-directory)))
+    (should-not
+     (string-equal (tramp--test-operation temporary-file-directory)
+		   (tramp--handler-for-test-operation
+		    temporary-file-directory)))
+    (let ((default-directory ert-remote-temporary-file-directory))
+      (should-not
+       (string-equal (tramp--test-operation)
+		     (tramp--handler-for-test-operation))))
+    (let ((default-directory temporary-file-directory))
+      (should-not
+       (string-equal (tramp--test-operation)
+		     (tramp--handler-for-test-operation))))))
+
 ;; This test is inspired by Bug#29163.
-(ert-deftest tramp-test49-auto-load ()
+(ert-deftest tramp-test50-auto-load ()
   "Check that Tramp autoloads properly."
   ;; If we use another syntax but `default', Tramp is already loaded
   ;; due to the `tramp-change-syntax' call.
@@ -8446,7 +8586,7 @@ process sentinels.  They shall not disturb each other."
 	(mapconcat #'shell-quote-argument load-path " -L ")
 	(shell-quote-argument code)))))))
 
-(ert-deftest tramp-test49-delay-load ()
+(ert-deftest tramp-test50-delay-load ()
   "Check that Tramp is loaded lazily, only when needed."
   ;; Tramp is neither loaded at Emacs startup, nor when completing a
   ;; non-Tramp file name like "/foo".  Completing a Tramp-alike file
@@ -8476,7 +8616,7 @@ process sentinels.  They shall not disturb each other."
 	  (mapconcat #'shell-quote-argument load-path " -L ")
 	  (shell-quote-argument (format code tm)))))))))
 
-(ert-deftest tramp-test49-recursive-load ()
+(ert-deftest tramp-test50-recursive-load ()
   "Check that Tramp does not fail due to recursive load."
   (skip-unless (tramp--test-enabled))
 
@@ -8500,7 +8640,7 @@ process sentinels.  They shall not disturb each other."
 	  (mapconcat #'shell-quote-argument load-path " -L ")
 	  (shell-quote-argument code))))))))
 
-(ert-deftest tramp-test49-remote-load-path ()
+(ert-deftest tramp-test50-remote-load-path ()
   "Check that Tramp autoloads its packages with remote `load-path'."
   ;; `tramp-cleanup-all-connections' is autoloaded from tramp-cmds.el.
   ;; It shall still work, when a remote file name is in the
@@ -8525,7 +8665,7 @@ process sentinels.  They shall not disturb each other."
 	(mapconcat #'shell-quote-argument load-path " -L ")
 	(shell-quote-argument code)))))))
 
-(ert-deftest tramp-test50-without-remote-files ()
+(ert-deftest tramp-test51-without-remote-files ()
   "Check that Tramp can be suppressed."
   (skip-unless (tramp--test-enabled))
 
@@ -8540,7 +8680,7 @@ process sentinels.  They shall not disturb each other."
   (setq tramp-mode t)
   (should (file-remote-p ert-remote-temporary-file-directory)))
 
-(ert-deftest tramp-test51-unload ()
+(ert-deftest tramp-test52-unload ()
   "Check that Tramp and its subpackages unload completely.
 Since it unloads Tramp, it shall be the last test to run."
   :tags '(:expensive-test)
@@ -8655,6 +8795,9 @@ If INTERACTIVE is non-nil, the tests are run interactively."
 ;;   famous reentrant error?
 ;; * Check, why direct async processes do not work for
 ;;   `tramp-test45-asynchronous-requests'.
+
+;; Starting with Emacs 29, use `ert-with-temp-file' and
+;; `ert-with-temp-directory'.
 
 (provide 'tramp-tests)
 

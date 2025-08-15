@@ -24,13 +24,13 @@
 
 ;;; Tree-sitter language versions
 ;;
-;; go-ts-mode is known to work with the following languages and version:
+;; go-ts-mode has been tested with the following grammars and version:
 ;; - tree-sitter-go: v0.23.4-1-g12fe553
 ;; - tree-sitter-go-mod: v1.1.0-3b01edce
 ;; - tree-sitter-go-work: 949a8a47
 ;;
 ;; We try our best to make builtin modes work with latest grammar
-;; versions, so a more recent grammar version has a good chance to work.
+;; versions, so a more recent grammar has a good chance to work too.
 ;; Send us a bug report if it doesn't.
 
 ;;; Commentary:
@@ -48,15 +48,18 @@
 
 (add-to-list
  'treesit-language-source-alist
- '(go "https://github.com/tree-sitter/tree-sitter-go" "v0.23.4")
+ '(go "https://github.com/tree-sitter/tree-sitter-go"
+      :commit "12fe553fdaaa7449f764bc876fd777704d4fb752")
  t)
 (add-to-list
  'treesit-language-source-alist
- '(gomod "https://github.com/camdencheek/tree-sitter-go-mod" "v1.1.0")
+ '(gomod "https://github.com/camdencheek/tree-sitter-go-mod"
+         :commit "3b01edce2b9ea6766ca19328d1850e456fde3103")
  t)
 (add-to-list
  'treesit-language-source-alist
- '(gowork "https://github.com/omertuc/tree-sitter-go-work")
+ '(gowork "https://github.com/omertuc/tree-sitter-go-work"
+          :commit "949a8a470559543857a62102c84700d291fc984c")
  t)
 
 (defcustom go-ts-mode-indent-offset 8
@@ -356,10 +359,21 @@
 
 (derived-mode-add-parents 'go-ts-mode '(go-mode))
 
-(if (treesit-ready-p 'go)
-    ;; FIXME: Should we instead put `go-mode' in `auto-mode-alist'
-    ;; and then use `major-mode-remap-defaults' to map it to `go-ts-mode'?
-    (add-to-list 'auto-mode-alist '("\\.go\\'" . go-ts-mode)))
+;;;###autoload
+(defun go-ts-mode-maybe ()
+  "Enable `go-ts-mode' when its grammar is available."
+  (if (or (treesit-language-available-p 'go)
+          (eq treesit-enabled-modes t)
+          (memq 'go-ts-mode treesit-enabled-modes))
+      (go-ts-mode)
+    (fundamental-mode)))
+
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'auto-mode-alist '("\\.go\\'" . go-ts-mode-maybe))
+  ;; To be able to toggle between an external package and core ts-mode:
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(go-mode . go-ts-mode)))
 
 (defun go-ts-mode--defun-name (node &optional skip-prefix)
   "Return the defun name of NODE.
@@ -619,8 +633,21 @@ what the parent of the node would be if it were a node."
 
 (derived-mode-add-parents 'go-mod-ts-mode '(go-mod-mode))
 
-(if (treesit-ready-p 'gomod t)
-    (add-to-list 'auto-mode-alist '("/go\\.mod\\'" . go-mod-ts-mode)))
+;;;###autoload
+(defun go-mod-ts-mode-maybe ()
+  "Enable `go-mod-ts-mode' when its grammar is available."
+  (if (or (treesit-language-available-p 'gomod)
+          (eq treesit-enabled-modes t)
+          (memq 'go-mod-ts-mode treesit-enabled-modes))
+      (go-mod-ts-mode)
+    (fundamental-mode)))
+
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'auto-mode-alist '("/go\\.mod\\'" . go-mod-ts-mode-maybe))
+  ;; To be able to toggle between an external package and core ts-mode:
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(go-mod-mode . go-mod-ts-mode)))
 
 ;;;; go.work support.
 
@@ -708,7 +735,20 @@ what the parent of the node would be if it were a node."
     (treesit-major-mode-setup)))
 
 ;;;###autoload
-(add-to-list 'auto-mode-alist '("/go\\.work\\'" . go-work-ts-mode))
+(defun go-work-ts-mode-maybe ()
+  "Enable `go-work-ts-mode' when its grammar is available."
+  (if (or (treesit-language-available-p 'gowork)
+          (eq treesit-enabled-modes t)
+          (memq 'go-work-ts-mode treesit-enabled-modes))
+      (go-work-ts-mode)
+    (fundamental-mode)))
+
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'auto-mode-alist '("/go\\.work\\'" . go-work-ts-mode-maybe))
+  ;; To be able to toggle between an external package and core ts-mode:
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(go-work-mode . go-work-ts-mode)))
 
 (provide 'go-ts-mode)
 

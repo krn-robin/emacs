@@ -132,7 +132,7 @@ option value:
           (restricted-sexp
            :tag "Variable with regexp value (default: `dired-re-exe')"
            :match-alternatives
-           ((lambda (obj) (and (symbolp obj) (boundp obj))))
+           (,(lambda (obj) (and (symbolp obj) (boundp obj))))
            :value dired-re-exe))
   :group 'dired-x)
 
@@ -475,7 +475,9 @@ status message."
                  nil)))
       (let ((omit-re (or regexp (dired-omit-regexp)))
             (old-modified-p (buffer-modified-p))
-            (count (or init-count 0)))
+            (count (or init-count 0))
+            (dired-omit-verbose
+             (and dired-omit-verbose (not auto-revert-buffer-in-progress))))
         (unless (string= omit-re "")
           (let ((dired-marker-char dired-omit-marker-char))
             (when dired-omit-verbose (message "Omitting..."))

@@ -145,6 +145,8 @@ Possible values are:
   1 - emitted code is to be generated in a safe manner, even if functions
       are mis-declared.
 
+Note that \"safe\" does not mean \"correct\": if functions are declared
+incorrectly, the emitted code might also be incorrect.
 This currently affects only code produced by native-compilation."
   :type 'integer
   :safe #'integerp
@@ -1102,7 +1104,7 @@ CONST2 may be evaluated multiple times."
                  hash-table)
         (dolist (elt alist)
           (puthash (car elt) (cdr elt) hash-table))))
-    (let ((bytecode (apply 'unibyte-string (nreverse bytes))))
+    (let ((bytecode (apply #'unibyte-string (nreverse bytes))))
       (when byte-native-compiling
         ;; Spill LAP for the native compiler here.
         (puthash bytecode (make-byte-to-native-lambda :lap lap)
@@ -1454,13 +1456,19 @@ when printing the error message."
 	 (env (cdr (assq name list))))
     (or env
 	(let ((fn name))
-	  (while (and (symbolp fn)
-		      (fboundp fn)
-		      (or (symbolp (symbol-function fn))
-			  (consp (symbol-function fn))
+	  (while
+              (and (symbolp fn)
+		   (fboundp fn)
+                   (let ((s (symbol-function fn)))
+                     (and
+		      (or (symbolp s)
+			  (consp s)
 			  (and (not macro-p)
-			       (compiled-function-p (symbol-function fn)))))
-	    (setq fn (symbol-function fn)))
+                               (or (closurep s)
+			           (compiled-function-p s))))
+                      (progn
+	                (setq fn s)
+                        t)))))
           (let ((advertised (get-advertised-calling-convention
                              (if (and (symbolp fn) (fboundp fn))
                                  ;; Could be a subr.
@@ -1471,7 +1479,8 @@ when printing the error message."
               (if macro-p
                   `(macro lambda ,advertised)
                 `(lambda ,advertised)))
-             ((and (not macro-p) (compiled-function-p fn)) fn)
+             ((and (not macro-p) (or (closurep fn) (compiled-function-p fn)))
+              fn)
              ((not (consp fn)) nil)
              ((eq 'macro (car fn)) (cdr fn))
              (macro-p nil)
@@ -2849,13 +2858,8 @@ not to take responsibility for the actual compilation of the code."
     (if (not (listp body))
         ;; The precise definition requires evaluation to find out, so it
         ;; will only be known at runtime.
-        ;; For a macro, that means we can't use that macro in the same file.
-        (progn
-          (unless macro
-            (push (cons bare-name (if (listp arglist) `(declared ,arglist) t))
-                  byte-compile-function-environment))
-          ;; Tell the caller that we didn't compile it yet.
-          nil)
+        ;; Tell the caller that we didn't compile it yet.
+        nil
 
       (let ((code (byte-compile-lambda `(lambda ,arglist . ,body))))
         (if this-one
@@ -5159,7 +5163,9 @@ binding slots have been popped."
        (pcase-let*
            ;; `macro' is non-nil if it defines a macro.
            ;; `fun' is the function part of `arg' (defaults to `arg').
-           (((or (and (or `(cons 'macro ,fun) `'(macro . ,fun)) (let macro t))
+           (((or (and (or `(cons 'macro ,fun)
+                          `'(macro . ,(app macroexp-quote fun)))
+                      (let macro t))
                  (and (let fun arg) (let macro nil)))
              arg)
             ;; `lam' is the lambda expression in `fun' (or nil if not
@@ -5174,12 +5180,13 @@ binding slots have been popped."
              lam))
          (unless (byte-compile-file-form-defmumble
                   name macro arglist body rest)
-           (when macro
-             (if (null fun)
-                 (message "Macro %s unrecognized, won't work in file" name)
-               (message "Macro %s partly recognized, trying our luck" name)
-               (push (cons name (eval fun lexical-binding))
-                     byte-compile-macro-environment)))
+           (if (not macro)
+               (push (cons name (if (listp arglist) `(declared ,arglist) t))
+                     byte-compile-function-environment)
+             (byte-compile-warn-x
+              name "Definition of macro %s not fully recognized" name)
+             (push (cons name (eval fun lexical-binding))
+                   byte-compile-macro-environment))
            (byte-compile-keep-pending form))))
 
       ;; We used to just do: (byte-compile-normal-call form)

@@ -26,12 +26,12 @@
 
 ;;; Tree-sitter language versions
 ;;
-;; js-ts-mode is known to work with the following languages and version:
+;; js-ts-mode has been tested with the following grammars and version:
 ;; - tree-sitter-jsdoc: v0.23.2
 ;; - tree-sitter-javascript: v0.23.1-2-g108b2d4
 ;;
 ;; We try our best to make builtin modes work with latest grammar
-;; versions, so a more recent grammar version has a good chance to work.
+;; versions, so a more recent grammar has a good chance to work too.
 ;; Send us a bug report if it doesn't.
 
 ;;; Commentary:
@@ -3410,11 +3410,13 @@ This function is intended for use in `after-change-functions'."
 
 (add-to-list
  'treesit-language-source-alist
- '(javascript "https://github.com/tree-sitter/tree-sitter-javascript" "v0.23.1")
+ '(javascript "https://github.com/tree-sitter/tree-sitter-javascript"
+              :commit "108b2d4d17a04356a340aea809e4dd5b801eb40d")
  t)
 (add-to-list
  'treesit-language-source-alist
- '(jsdoc "https://github.com/tree-sitter/tree-sitter-jsdoc" "v0.23.2")
+ '(jsdoc "https://github.com/tree-sitter/tree-sitter-jsdoc"
+         :commit "b253abf68a73217b7a52c0ec254f4b6a7bb86665")
  t)
 
 (defun js--treesit-font-lock-compatibility-definition-feature ()
@@ -4103,12 +4105,14 @@ See `treesit-thing-settings' for more information.")
     ;; Outline minor mode
     (setq-local treesit-outline-predicate js-ts-mode--outline-predicate)
 
-    (treesit-major-mode-setup)
-
-    (add-to-list 'auto-mode-alist
-                 '("\\(\\.js[mx]\\|\\.har\\)\\'" . js-ts-mode))))
+    (treesit-major-mode-setup)))
 
 (derived-mode-add-parents 'js-ts-mode '(js-mode))
+
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(javascript-mode . js-ts-mode)))
 
 (defvar js-ts--s-p-query
   (when (treesit-available-p)
@@ -4140,6 +4144,7 @@ See `treesit-thing-settings' for more information.")
   :syntax-table js-mode-syntax-table
   (js--mode-setup) ;Reuse most of `js-mode', but not as parent (bug#67463).
   (setq-local js-enabled-frameworks nil)
+  (setq-local editorconfig-indent-size-vars '(js-indent-level))
   ;; Speed up `syntax-ppss': JSON files can be big but can't hold
   ;; regexp matchers nor #! thingies (and `js-enabled-frameworks' is nil).
   (setq-local syntax-propertize-function #'ignore))

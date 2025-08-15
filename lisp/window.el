@@ -4017,7 +4017,8 @@ COUNT and ALL-FRAMES.  Otherwise, do not return a window for which
 This function uses `next-window' for finding the window to
 select.  The argument ALL-FRAMES has the same meaning as in
 `next-window', but the MINIBUF argument of `next-window' is
-always effectively nil."
+always effectively nil.  Interactively, ALL-FRAMES is always
+nil, which considers all windows on the selected frame."
   (interactive "p\ni\np")
   (let* ((window (selected-window))
          (original-window window)
@@ -4072,10 +4073,21 @@ always effectively nil."
 	;; Always return nil.
 	nil))))
 
+(defun other-window-backward (count &optional all-frames interactive)
+  "Select another window in the reverse cyclic ordering of windows.
+COUNT specifies the number of windows to skip, (by default) backward,
+starting with the selected window, before making the selection.  Like
+`other-window', but moves in the opposite direction."
+  (interactive "p\ni\np")
+  (other-window (- (or count 1)) all-frames interactive))
+
 (defun other-window-prefix ()
   "Display the buffer of the next command in a new window.
 The next buffer is the buffer displayed by the next command invoked
 immediately after this command (ignoring reading from the minibuffer).
+In case of multiple consecutive mouse events such as <down-mouse-1>,
+a mouse release event <mouse-1>, <double-mouse-1>, <triple-mouse-1>
+all bound commands are handled until one of them displays a buffer.
 Creates a new window before displaying the buffer.
 When `switch-to-buffer-obey-display-actions' is non-nil,
 `switch-to-buffer' commands are also supported."
@@ -4096,6 +4108,9 @@ When `switch-to-buffer-obey-display-actions' is non-nil,
   "Display the buffer of the next command in the same window.
 The next buffer is the buffer displayed by the next command invoked
 immediately after this command (ignoring reading from the minibuffer).
+In case of multiple consecutive mouse events such as <down-mouse-1>,
+a mouse release event <mouse-1>, <double-mouse-1>, <triple-mouse-1>
+all bound commands are handled until one of them displays a buffer.
 Even when the default rule should display the buffer in a new window,
 force its display in the already selected window.
 When `switch-to-buffer-obey-display-actions' is non-nil,
@@ -5347,7 +5362,7 @@ Do not select an inactive minibuffer window."
 		 (not (eq frame (window-frame window))))
       (setq frame (window-frame window))
       (set-frame-selected-window frame window)
-      (select-frame-set-input-focus frame))))
+      (select-frame frame))))
 
 (defun quit-restore-window (&optional window bury-or-kill)
   "Quit WINDOW and deal with its buffer.
@@ -5510,15 +5525,16 @@ elsewhere.  This value is used by `quit-windows-on'."
       (bury-buffer-internal buffer)))))
 
 (defcustom quit-window-kill-buffer nil
-  "Non-nil means `quit-window' will try to kill WINDOW's buffer.
-If this is nil and the KILL argument is nil, `quit-window' will bury
-WINDOW's buffer.  If this is t, `quit-window' will always try to kill
-WINDOW's buffer.  Otherwise, this should be a list of major modes.
-`quit-window' will kill the buffer of its WINDOW argument regardless of
-the value of KILL if that buffer's major mode is either a member of this
-list or is derived from a member of this list.  In any other case,
-`quit-window' will kill the buffer only if KILL is non-nil and bury it
-otherwise."
+  "Non-nil means `quit-window' will try to kill buffer of WINDOW it quits.
+If this variable is nil (the default), `quit-window' will bury WINDOW's
+buffer if the KILL argument is nil and kill it otherwise.
+If this is t, `quit-window' will try to kill WINDOW's buffer regardless
+of the value of KILL.
+If this is a list of major modes, `quit-window' will kill the WINDOW's
+buffer regardless of the value of KILL if that buffer's major mode is
+either a member of this list or is derived from a member of this list.
+For any other value, `quit-window' will kill the buffer only if KILL is
+non-nil and bury it otherwise."
   :type '(choice (boolean :tag "All major modes")
 		 (repeat (symbol :tag "Major mode")))
   :version "31.1"
@@ -5528,7 +5544,9 @@ otherwise."
   "Quit WINDOW and bury its buffer.
 WINDOW must be a live window and defaults to the selected one.
 With prefix argument KILL non-nil, kill the buffer instead of
-burying it.
+burying it.  If `quit-window-kill-buffer' is non-nil, perhaps
+kill the buffer even if KILL is nil; see the doc string of
+that variable for the details.
 
 This calls the function `quit-restore-window' to delete WINDOW or
 show some other buffer in it.  See Info node `(elisp) Quitting
@@ -5898,6 +5916,16 @@ changed by this function."
 	  (set-window-new-normal
 	   window (- (if new-parent 1.0 (window-normal-size window horizontal))
 		     new-normal)))
+
+	(unless horizontal
+	  (let ((quit-restore (window-parameter window 'quit-restore)))
+	    (when quit-restore
+	      (let ((quad (nth 1 quit-restore)))
+		(when (and (listp quad) (integerp (nth 3 quad)))
+		  ;; When WINDOW has a 'quit-restore' parameter that
+		  ;; specifies a previous height to restore, remove that
+		  ;; - it does more harm than good now (Bug#78835).
+		  (setf (nth 3 quad) nil))))))
 
 	(let ((new (split-window-internal
 		    window new-pixel-size side new-normal refer)))
@@ -6787,7 +6815,7 @@ was killed since STATE was made, it will consult the variable
 			   (if pixelwise 'min-pixel-height 'min-height)
 			   head)))
 	 (min-width (cdr (assq
-			  (if pixelwise 'min-pixel-width 'min-weight)
+			  (if pixelwise 'min-pixel-width 'min-width)
 			  head)))
 	 ;; Bind the following two variables.  `window--state-put-1' has
 	 ;; to fully control them (see Bug#50867 and Bug#64405).
@@ -9657,12 +9685,15 @@ to deactivate this overriding action."
     (fset postfun
           (lambda ()
             (unless (or
-		     ;; Remove the hook immediately
-		     ;; after exiting the minibuffer.
-		     (> (minibuffer-depth) minibuffer-depth)
-		     ;; But don't remove immediately after
-		     ;; adding the hook by the same command below.
-		     (eq this-command command))
+                     ;; Remove the hook immediately
+                     ;; after exiting the minibuffer.
+                     (> (minibuffer-depth) minibuffer-depth)
+                     ;; But don't remove immediately after
+                     ;; adding the hook by the same command below.
+                     (eq this-command command)
+                     ;; Don't exit on mouse events in anticipation
+                     ;; of more related events like double click.
+                     (mouse-event-p last-input-event))
               (funcall exitfun))))
     ;; Call post-function after the next command finishes (bug#49057).
     (add-hook 'post-command-hook postfun)
@@ -11350,6 +11381,7 @@ found by the provided context."
 (define-key ctl-x-map "2" 'split-window-below)
 (define-key ctl-x-map "3" 'split-window-right)
 (define-key ctl-x-map "o" 'other-window)
+(define-key ctl-x-map "O" 'other-window-backward)
 (define-key ctl-x-map "^" 'enlarge-window)
 (define-key ctl-x-map "}" 'enlarge-window-horizontally)
 (define-key ctl-x-map "{" 'shrink-window-horizontally)
@@ -11363,10 +11395,7 @@ found by the provided context."
   :doc "Keymap to repeat `other-window'.  Used in `repeat-mode'."
   :repeat t
   "o" #'other-window
-  "O" (lambda ()
-        (interactive)
-        (setq repeat-map 'other-window-repeat-map)
-        (other-window -1)))
+  "O" #'other-window-backward)
 
 (defvar-keymap resize-window-repeat-map
   :doc "Keymap to repeat window resizing commands.

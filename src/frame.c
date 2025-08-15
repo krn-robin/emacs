@@ -364,8 +364,8 @@ frame_redisplay_p (struct frame *f)
 {
   if (is_tty_frame (f))
     {
-      struct frame *p = FRAME_PARENT_FRAME (f);
-      struct frame *q = NULL;
+      struct frame *p = f;
+      struct frame *q = f;
 
       while (p)
 	{
@@ -387,7 +387,7 @@ frame_redisplay_p (struct frame *f)
 	 frame of its terminal.  Any other tty frame can be redisplayed
 	 iff it is the top frame of its terminal itself which must be
 	 always visible.  */
-      return (q ? q == r : f == r);
+      return q == r;
     }
   else
 #ifndef HAVE_X_WINDOWS
@@ -1448,6 +1448,15 @@ make_terminal_frame (struct terminal *terminal, Lisp_Object parent,
   FRAME_FOREGROUND_PIXEL (f) = FACE_TTY_DEFAULT_FG_COLOR;
   FRAME_BACKGROUND_PIXEL (f) = FACE_TTY_DEFAULT_BG_COLOR;
 #endif /* not MSDOS */
+
+  struct tty_display_info *tty = terminal->display_info.tty;
+
+  if (NILP (tty->top_frame))
+    /* If this frame's terminal's top frame has not been set up yet,
+       make the new frame its top frame so the top frame has been set up
+       before the first do_switch_frame on this terminal happens.  See
+       Bug#78966.  */
+    tty->top_frame = frame;
 
 #ifdef HAVE_WINDOW_SYSTEM
   f->vertical_scroll_bar_type = vertical_scroll_bar_none;
@@ -4608,6 +4617,8 @@ static const struct frame_parm_table frame_parms[] =
   {"override-redirect",		SYMBOL_INDEX (Qoverride_redirect)},
   {"no-special-glyphs",		SYMBOL_INDEX (Qno_special_glyphs)},
   {"alpha-background",		SYMBOL_INDEX (Qalpha_background)},
+  {"borders-respect-alpha-background",
+				SYMBOL_INDEX (Qborders_respect_alpha_background)},
   {"use-frame-synchronization",	SYMBOL_INDEX (Quse_frame_synchronization)},
 #ifdef HAVE_X_WINDOWS
   {"shaded",			SYMBOL_INDEX (Qshaded)},
@@ -5809,6 +5820,13 @@ gui_set_alpha_background (struct frame *f, Lisp_Object arg, Lisp_Object oldval)
   SET_FRAME_GARBAGED (f);
 }
 
+void
+gui_set_borders_respect_alpha_background (struct frame *f, Lisp_Object arg,
+					  Lisp_Object oldval)
+{
+  f->borders_respect_alpha_background = !NILP (arg);
+}
+
 /**
  * gui_set_no_special_glyphs:
  *
@@ -7000,6 +7018,7 @@ syms_of_frame (void)
 
   DEFSYM (Qalpha, "alpha");
   DEFSYM (Qalpha_background, "alpha-background");
+  DEFSYM (Qborders_respect_alpha_background, "borders-respect-alpha-background");
   DEFSYM (Qauto_lower, "auto-lower");
   DEFSYM (Qauto_raise, "auto-raise");
   DEFSYM (Qborder_color, "border-color");

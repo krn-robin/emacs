@@ -159,7 +159,11 @@ set_backtrace_debug_on_exit (union specbinding *pdl, bool doe)
 
 bool
 backtrace_p (union specbinding *pdl)
-{ return specpdl ? pdl >= specpdl : false; }
+{
+  if (current_thread && specpdl && pdl)
+    return pdl >= specpdl;
+  return false;
+}
 
 static bool
 backtrace_thread_p (struct thread_state *tstate, union specbinding *pdl)
@@ -171,7 +175,7 @@ backtrace_top (void)
   /* This is so "xbacktrace" doesn't crash in pdumped Emacs if they
      invoke the command before init_eval_once_for_pdumper initializes
      specpdl machinery.  See also backtrace_p above.  */
-  if (!specpdl)
+  if (!current_thread || !specpdl)
     return NULL;
 
   union specbinding *pdl = specpdl_ptr - 1;
@@ -298,6 +302,7 @@ call_debugger (Lisp_Object arg)
   /* Resetting redisplaying_p to 0 makes sure that debug output is
      displayed if the debugger is invoked during redisplay.  */
   debug_while_redisplaying = redisplaying_p;
+  int redisplay_counter_before = redisplay_counter;
   redisplaying_p = 0;
   specbind (Qdebugger_may_continue,
 	    debug_while_redisplaying ? Qnil : Qt);
@@ -319,9 +324,10 @@ call_debugger (Lisp_Object arg)
   /* Interrupting redisplay and resuming it later is not safe under
      all circumstances.  So, when the debugger returns, abort the
      interrupted redisplay by going back to the top-level.  */
-  /* FIXME: Move this to the redisplay code?  */
   if (debug_while_redisplaying
-      && !EQ (Vdebugger, Qdebug_early))
+      && redisplay_counter_before != redisplay_counter)
+    /* FIXME: Rather than jump all the way to `top-level`
+       we should exit only the current redisplay.  */
     Ftop_level ();
 
   return unbind_to (count, val);
@@ -3085,6 +3091,21 @@ FUNCTIONP (Lisp_Object object)
     return false;
 }
 
+DEFUN ("debugger-trap", Fdebugger_trap, Sdebugger_trap, 0, 0, "",
+       doc: /* Stop Emacs and hand over control to GDB.
+The Emacs source file src/.gdbinit sets a breakpoint in this function.
+
+This function does nothing.  It is not called by Emacs otherwise, and
+exists so that calling it or invoking it interactively will cause
+GDB to kick in.
+
+For Lisp debugging see `debug', as well as `edebug', in the manual:
+"(elisp) Debugging".  */)
+  (void)
+{
+  return Qnil;
+}
+
 Lisp_Object
 funcall_general (Lisp_Object fun, ptrdiff_t numargs, Lisp_Object *args)
 {
@@ -4611,4 +4632,5 @@ alist of active lexical bindings.  */);
   defsubr (&Sspecial_variable_p);
   DEFSYM (Qfunctionp, "functionp");
   defsubr (&Sfunctionp);
+  defsubr (&Sdebugger_trap);
 }

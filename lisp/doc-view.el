@@ -1677,7 +1677,8 @@ ARGS is a list of image descriptors."
                             (setq args `(,@args :transform-smoothing t)))
                           (when (eq doc-view--image-type 'svg)
                             (setq args `(,@args :background ,(face-background 'doc-view-svg-face)
-                                                :foreground ,(face-foreground 'doc-view-svg-face))))
+                                                :foreground ,(face-foreground 'doc-view-svg-face)
+                                                :css "svg{fill:currentcolor;}")))
 			  (apply #'create-image file doc-view--image-type nil args))))
 	     (slice (doc-view-current-slice))
 	     (img-width (and image (car (image-size image))))
@@ -2142,7 +2143,11 @@ If FILE-NAME is nil, use the current file instead."
 (defun doc-view-initiate-display ()
   ;; Switch to image display if possible.
   (if (doc-view-mode-p doc-view-doc-type)
-      (progn
+      ;; Inhibit the echo area display of the "Type C-c C-c..." message
+      ;; if the doc-view buffer is not shown in the selected window
+      ;; which can happen due to auto-reverting the buffer (bug#79145).
+      (let ((inhibit-message (not (eq (current-buffer)
+                                      (window-buffer)))))
 	(doc-view-buffer-message)
 	(setf (doc-view-current-page) (or (doc-view-current-page) 1))
 	(if (doc-view-already-converted-p)

@@ -24,11 +24,11 @@
 
 ;;; Tree-sitter language versions
 ;;
-;; dockerfile-ts-mode is known to work with the following languages and version:
+;; dockerfile-ts-mode has been tested with the following grammars and version:
 ;; - tree-sitter-dockerfile: v0.2.0-1-g087daa2
 ;;
 ;; We try our best to make builtin modes work with latest grammar
-;; versions, so a more recent grammar version has a good chance to work.
+;; versions, so a more recent grammar has a good chance to work too.
 ;; Send us a bug report if it doesn't.
 
 ;;; Commentary:
@@ -42,7 +42,8 @@
 
 (add-to-list
  'treesit-language-source-alist
- '(dockerfile "https://github.com/camdencheek/tree-sitter-dockerfile" "v0.2.0")
+ '(dockerfile "https://github.com/camdencheek/tree-sitter-dockerfile"
+              :commit "087daa20438a6cc01fa5e6fe6906d77c869d19fe")
  t)
 
 (defvar dockerfile-ts-mode--syntax-table
@@ -201,11 +202,24 @@ Return nil if there is no name or if NODE is not a stage node."
 
 (derived-mode-add-parents 'dockerfile-ts-mode '(dockerfile-mode))
 
-(if (treesit-ready-p 'dockerfile)
-    (add-to-list 'auto-mode-alist
-                 ;; NOTE: We can't use `rx' here, as it breaks bootstrap.
-                 '("\\(?:Dockerfile\\(?:\\..*\\)?\\|\\.[Dd]ockerfile\\)\\'"
-                   . dockerfile-ts-mode)))
+;;;###autoload
+(defun dockerfile-ts-mode-maybe ()
+  "Enable `dockerfile-ts-mode' when its grammar is available."
+  (if (or (treesit-language-available-p 'dockerfile)
+          (eq treesit-enabled-modes t)
+          (memq 'dockerfile-ts-mode treesit-enabled-modes))
+      (dockerfile-ts-mode)
+    (fundamental-mode)))
+
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'auto-mode-alist
+               ;; NOTE: We can't use `rx' here, as it breaks bootstrap.
+               '("\\(?:Dockerfile\\(?:\\..*\\)?\\|\\.[Dd]ockerfile\\)\\'"
+                 . dockerfile-ts-mode-maybe))
+  ;; To be able to toggle between an external package and core ts-mode:
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(dockerfile-mode . dockerfile-ts-mode)))
 
 (provide 'dockerfile-ts-mode)
 

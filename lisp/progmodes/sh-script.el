@@ -1648,6 +1648,11 @@ not written in Bash or sh."
 
 (derived-mode-add-parents 'bash-ts-mode '(sh-mode))
 
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(sh-mode . bash-ts-mode)))
+
 (advice-add 'bash-ts-mode :around #'sh--redirect-bash-ts-mode
             ;; Give it lower precedence than normal advice, so other
             ;; advices take precedence over it.
@@ -3267,7 +3272,8 @@ member of `flymake-diagnostic-functions'."
 
 (add-to-list
  'treesit-language-source-alist
- '(bash "https://github.com/tree-sitter/tree-sitter-bash" "v0.23.3")
+ '(bash "https://github.com/tree-sitter/tree-sitter-bash"
+        :commit "487734f87fd87118028a65a4599352fa99c9cde8")
  t)
 
 (defvar sh-mode--treesit-operators

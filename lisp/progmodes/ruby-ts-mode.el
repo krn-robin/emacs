@@ -24,11 +24,11 @@
 
 ;;; Tree-sitter language versions
 ;;
-;; ruby-ts-mode is known to work with the following languages and version:
+;; ruby-ts-mode has been tested with the following grammars and version:
 ;; - tree-sitter-ruby: v0.23.1
 ;;
 ;; We try our best to make builtin modes work with latest grammar
-;; versions, so a more recent grammar version has a good chance to work.
+;; versions, so a more recent grammar has a good chance to work too.
 ;; Send us a bug report if it doesn't.
 
 ;;; Commentary:
@@ -68,11 +68,8 @@
 ;;
 ;;   will turn on the ruby-ts-mode for Ruby source files.
 ;;
-;; - If you have the Ruby grammar installed, add
-;;
-;;     (load "ruby-ts-mode")
-;;
-;;   to your init file.
+;; - If you have the Ruby grammar installed, customize
+;;   'treesit-enabled-modes' and add 'ruby-ts-mode' to it.
 ;;
 ;; You can also turn on this mode manually in a buffer.
 
@@ -125,7 +122,8 @@
 
 (add-to-list
  'treesit-language-source-alist
- '(ruby "https://github.com/tree-sitter/tree-sitter-ruby" "v0.23.1")
+ '(ruby "https://github.com/tree-sitter/tree-sitter-ruby"
+        :commit "71bd32fb7607035768799732addba884a37a6210")
  t)
 
 (defgroup ruby-ts nil
@@ -1279,11 +1277,10 @@ leading double colon is not added."
 
 (derived-mode-add-parents 'ruby-ts-mode '(ruby-mode))
 
-(when (treesit-ready-p 'ruby)
-  (setq major-mode-remap-defaults
-        (assq-delete-all 'ruby-mode major-mode-remap-defaults))
-  (add-to-list 'major-mode-remap-defaults
-                 '(ruby-mode . ruby-ts-mode)))
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(ruby-mode . ruby-ts-mode)))
 
 (provide 'ruby-ts-mode)
 

@@ -154,7 +154,7 @@ AC_DEFUN([gl_EARLY],
   # Code from module nanosleep:
   # Code from module nocrash:
   # Code from module nproc:
-  # Code from module nstrftime:
+  # Code from module nstrftime-limited:
   # Code from module open:
   # Code from module openat-h:
   # Code from module pathmax:
@@ -547,12 +547,7 @@ AC_DEFUN([gl_INIT],
   GL_STDC_LEADING_ZEROS=1
   AC_REQUIRE([gl_STDBIT_H])
   GL_STDC_TRAILING_ZEROS=1
-  AC_CHECK_HEADERS_ONCE([stdckdint.h])
-  if test $ac_cv_header_stdckdint_h = yes; then
-    GL_GENERATE_STDCKDINT_H=false
-  else
-    GL_GENERATE_STDCKDINT_H=true
-  fi
+  gl_STDCKDINT_H
   gl_CONDITIONAL_HEADER([stdckdint.h])
   AC_PROG_MKDIR_P
   gl_STDDEF_H
@@ -1253,6 +1248,10 @@ AC_DEFUN([gl_FILE_LIST], [
   lib/c-strcase.h
   lib/c-strcasecmp.c
   lib/c-strncasecmp.c
+  lib/calendar-ethiopian.h
+  lib/calendar-persian.h
+  lib/calendar-thai.h
+  lib/calendars.h
   lib/canonicalize-lgpl.c
   lib/careadlinkat.c
   lib/careadlinkat.h
@@ -1421,6 +1420,7 @@ AC_DEFUN([gl_FILE_LIST], [
   lib/strtol.c
   lib/strtoll.c
   lib/symlink.c
+  lib/sys-limits.h
   lib/sys_random.in.h
   lib/sys_select.in.h
   lib/sys_stat.in.h
@@ -1558,6 +1558,7 @@ AC_DEFUN([gl_FILE_LIST], [
   m4/std-gnu11.m4
   m4/stdalign.m4
   m4/stdbit_h.m4
+  m4/stdckdint_h.m4
   m4/stddef_h.m4
   m4/stdint.m4
   m4/stdio_h.m4

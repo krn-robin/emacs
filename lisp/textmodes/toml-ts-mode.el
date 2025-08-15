@@ -38,7 +38,8 @@
 
 (add-to-list
  'treesit-language-source-alist
- '(toml "https://github.com/tree-sitter-grammars/tree-sitter-toml" "v0.7.0")
+ '(toml "https://github.com/tree-sitter-grammars/tree-sitter-toml"
+        :commit "64b56832c2cffe41758f28e05c756a3a98d16f41")
  t)
 
 (defcustom toml-ts-mode-indent-offset 2
@@ -171,8 +172,10 @@ Return nil if there is no name or if NODE is not a defun node."
 
 (derived-mode-add-parents 'toml-ts-mode '(toml-mode))
 
-(if (treesit-ready-p 'toml)
-    (add-to-list 'auto-mode-alist '("\\.toml\\'" . toml-ts-mode)))
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(conf-toml-mode . toml-ts-mode)))
 
 (provide 'toml-ts-mode)
 

@@ -24,11 +24,14 @@
 
 ;;; Tree-sitter language versions
 ;;
-;; typescript-ts-mode is known to work with the following languages and version:
+;; typescript-ts-mode has been tested with the following grammars and version:
 ;; - tree-sitter-typescript: v0.23.2-2-g8e13e1d
 ;;
+;; tsx-ts-mode has been tested with the following grammars and version:
+;; - tree-sitter-tsx: v0.23.2-2-g8e13e1d
+;;
 ;; We try our best to make builtin modes work with latest grammar
-;; versions, so a more recent grammar version has a good chance to work.
+;; versions, so a more recent grammar has a good chance to work too.
 ;; Send us a bug report if it doesn't.
 
 ;;; Commentary:
@@ -45,14 +48,16 @@
 (add-to-list
  'treesit-language-source-alist
  '(typescript
-   "https://github.com/tree-sitter/tree-sitter-typescript" "v0.23.2"
-   "typescript/src")
+   "https://github.com/tree-sitter/tree-sitter-typescript"
+   :commit "8e13e1db35b941fc57f2bd2dd4628180448c17d5"
+   :source-dir "typescript/src")
  t)
 (add-to-list
  'treesit-language-source-alist
  '(tsx
-   "https://github.com/tree-sitter/tree-sitter-typescript" "v0.23.2"
-   "tsx/src")
+   "https://github.com/tree-sitter/tree-sitter-typescript"
+   :commit "8e13e1db35b941fc57f2bd2dd4628180448c17d5"
+   :source-dir "tsx/src")
  t)
 
 (defcustom typescript-ts-mode-indent-offset 2
@@ -717,8 +722,21 @@ This mode is intended to be inherited by concrete major modes."
 
 (derived-mode-add-parents 'typescript-ts-mode '(typescript-mode))
 
-(if (treesit-ready-p 'typescript)
-    (add-to-list 'auto-mode-alist '("\\.ts\\'" . typescript-ts-mode)))
+;;;###autoload
+(defun typescript-ts-mode-maybe ()
+  "Enable `typescript-ts-mode' when its grammar is available."
+  (if (or (treesit-language-available-p 'typescript)
+          (eq treesit-enabled-modes t)
+          (memq 'typescript-ts-mode treesit-enabled-modes))
+      (typescript-ts-mode)
+    (fundamental-mode)))
+
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'auto-mode-alist '("\\.ts\\'" . typescript-ts-mode-maybe))
+  ;; To be able to toggle between an external package and core ts-mode:
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(typescript-mode . typescript-ts-mode)))
 
 ;;;###autoload
 (define-derived-mode tsx-ts-mode typescript-ts-base-mode "TypeScript[TSX]"
@@ -837,8 +855,21 @@ at least 3 (which is the default value)."
                               ((equal (match-string 0) ">") ")>")
                               (t ".")))))))))))
 
-(if (treesit-ready-p 'tsx)
-    (add-to-list 'auto-mode-alist '("\\.tsx\\'" . tsx-ts-mode)))
+;;;###autoload
+(defun tsx-ts-mode-maybe ()
+  "Enable `tsx-ts-mode' when its grammar is available."
+  (if (or (treesit-language-available-p 'tsx)
+          (eq treesit-enabled-modes t)
+          (memq 'tsx-ts-mode treesit-enabled-modes))
+      (tsx-ts-mode)
+    (fundamental-mode)))
+
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'auto-mode-alist '("\\.tsx\\'" . tsx-ts-mode-maybe))
+  ;; To be able to toggle between an external package and core ts-mode:
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(tsx-mode . tsx-ts-mode)))
 
 (provide 'typescript-ts-mode)
 

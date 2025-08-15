@@ -195,6 +195,22 @@ Also check that an encoding error can appear in a symlink."
     (insert-file-contents "/dev/urandom" nil nil 10)
     (should (= (buffer-size) 10))))
 
+(ert-deftest fileio-tests--read-directory ()
+  "Make sure insertring a directory fails with a platform-independent error."
+  (ert-with-temp-directory dir
+    (let* ((dir-name (directory-file-name dir))
+           (err (should-error (insert-file-contents dir-name)))
+           (desc-string
+            ;; On MS-Windows we fail trying to 'open' a directory.
+            (if (eq system-type 'windows-nt)
+                "Opening input file"
+              "Read error")))
+      (should (equal err
+                     (list 'file-error
+                           desc-string
+                           "Is a directory"
+                           dir-name))))))
+
 (defun fileio-tests--identity-expand-handler (_ file &rest _)
   file)
 (put 'fileio-tests--identity-expand-handler 'operations '(expand-file-name))
@@ -234,6 +250,32 @@ Also check that an encoding error can appear in a symlink."
                   ;; 100-nsec resolution of Windows file time stamps.
                   "2025/02/01 23:15:59.123456700")))
       (delete-file tfile))))
+
+(defconst ert--tests-dir
+  (file-name-directory (macroexp-file-name)))
+
+(ert-deftest fileio-tests--insert-file-contents-supersession ()
+  (ert-with-temp-file file
+    (write-region "foo" nil file)
+    (let* ((asked nil)
+           (buf (find-file-noselect file))
+           (auast (lambda (&rest _) (setq asked t))))
+      (unwind-protect
+          (with-current-buffer buf
+            ;; Pretend someone else edited the file.
+            (write-region "bar" nil file 'append)
+            ;; Use `advice-add' rather than `cl-letf' because the function
+            ;; may not be defined yet.
+            (advice-add 'ask-user-about-supersession-threat :override auast)
+            ;; Modify the local buffer via `insert-file-contents'.
+            (insert-file-contents
+             (expand-file-name "lread-resources/somelib.el"
+                               ert--tests-dir)
+             nil nil nil 'replace))
+        (advice-remove 'ask-user-about-supersession-threat auast)
+        (kill-buffer buf))
+      ;; We should have prompted about the supersession threat.
+      (should asked))))
 
 
 ;;; fileio-tests.el ends here

@@ -233,7 +233,7 @@ The string is used in `tramp-methods'.")
 							    tramp-terminal-type))
 					     ("%h")))
                 (tramp-async-args           (("-q")))
-                (tramp-direct-async         t)
+		(tramp-direct-async         ("-t" "-t"))
                 (tramp-remote-shell         ,tramp-default-remote-shell)
                 (tramp-remote-shell-login   ("-l"))
                 (tramp-remote-shell-args    ("-c"))
@@ -731,18 +731,31 @@ print \"(\\n\";
 foreach $f (@files) {
   ($p = $f) =~ s/\\\"/\\\\\\\"/g;
   ($q = \"$dir/$f\") =~ s/\\\"/\\\\\\\"/g;
-  print \"(\",
-    ((-d \"$q\") ? \"\\\"$p/\\\" \\\"$q\\\" t\" : \"\\\"$p\\\" \\\"$q\\\" nil\"),
+  print \"(\\\"$q\\\"\",
     ((-e \"$q\") ? \" t\" : \" nil\"),
     ((-r \"$q\") ? \" t\" : \" nil\"),
+    ((-d \"$q\") ? \" t\" : \" nil\"),
+    ((-x \"$q\") ? \" t\" : \" nil\"),
     \")\\n\";
 }
 print \")\\n\";
 ' \"$1\" %n"
   "Perl script to produce output suitable for use with
-`file-name-all-completions' on the remote file system.
-Format specifiers are replaced by `tramp-expand-script', percent
-characters need to be doubled.")
+`file-name-all-completions' on the remote file system.  It returns the
+same format as `tramp-bundle-read-file-names'.  Format specifiers are
+replaced by `tramp-expand-script', percent characters need to be
+doubled.")
+
+(defconst tramp-shell-file-name-all-completions
+  "cd \"$1\" 2>&1; %l -a %n | while IFS= read file; do
+    quoted=`echo \"$1/$file\" | sed -e \"s#//#/#g\"`
+    printf \"%%s\\n\" \"$quoted\"
+  done | tramp_bundle_read_file_names"
+   "Shell script to produce output suitable for use with
+`file-name-all-completions' on the remote file system.  It returns the
+same format as `tramp-bundle-read-file-names'.  Format specifiers are
+replaced by `tramp-expand-script', percent characters need to be
+doubled.")
 
 ;; Perl script to implement `file-attributes' in a Lisp `read'able
 ;; output.  If you are hacking on this, note that you get *no* output
@@ -1172,21 +1185,22 @@ characters need to be doubled.")
 
 (defconst tramp-bundle-read-file-names
   "echo \"(\"
-while read file; do
-  quoted=`echo \"$file\" | sed -e \"s/\\\"/\\\\\\\\\\\\\\\\\\\"/\"`
-  printf \"(%%b\" \"\\\"$quoted\\\"\"
-  if %q \"$file\"; then printf \" %%b\" t; else printf \" %%b\" nil; fi
-  if %m -r \"$file\"; then printf \" %%b\" t; else printf \" %%b\" nil; fi
-  if %m -d \"$file\"; then printf \" %%b)\n\" t; else printf \" %%b)\n\" nil; fi
+while IFS= read file; do
+  quoted=`echo \"$file\" | sed -e \"s/\\\"/\\\\\\\\\\\\\\\\\\\"/g\"`
+  printf \"(%%s\" \"\\\"$quoted\\\"\"
+  if %q \"$file\"; then printf \" %%s\" t; else printf \" %%s\" nil; fi
+  if %m -r \"$file\"; then printf \" %%s\" t; else printf \" %%s\" nil; fi
+  if %m -d \"$file\"; then printf \" %%s\" t; else printf \" %%s\" nil; fi
+  if %m -x \"$file\"; then printf \" %%s)\\n\" t; else printf \" %%s)\\n\" nil; fi
 done
 echo \")\""
-  "Script to check file attributes of a bundle of files.
-It must be sent formatted with three strings; the tests for file
-existence, file readability, and file directory.  Input shall be
-read via here-document, otherwise the command could exceed
-maximum length of command line.
-Format specifiers \"%s\" are replaced before the script is used,
-percent characters need to be doubled.")
+  "Shell script to check file attributes of a bundle of files.
+For every file, it returns a list with the absolute file name, and the
+tests for file existence, file readability, file directory, and file
+executable.  Input shall be read via here-document, otherwise the
+command could exceed maximum length of command line.  Format specifiers
+\"%s\" are replaced before the script is used, percent characters need
+to be doubled.")
 
 ;; New handlers should be added here.
 ;;;###tramp-autoload
@@ -1945,47 +1959,40 @@ ID-FORMAT valid values are `string' and `integer'."
 	       ;; reliably tagging the directories with a trailing "/".
 	       ;; Because I rock.  --daniel@danann.net
 	       (if (tramp-get-remote-perl v)
-		   (progn
-		     (tramp-maybe-send-script
-		      v tramp-perl-file-name-all-completions
-		      "tramp_perl_file_name_all_completions")
-		     (setq result
-			   (tramp-send-command-and-read
-			    v (format "tramp_perl_file_name_all_completions %s"
-				      (tramp-shell-quote-argument localname))
-			    'noerror))
-		     ;; Cached values.
-		     (dolist (elt result)
-		       (tramp-set-file-property
-			v (cadr elt) "file-directory-p" (nth 2 elt))
-		       (tramp-set-file-property
-			v (cadr elt) "file-exists-p" (nth 3 elt))
-		       (tramp-set-file-property
-			v (cadr elt) "file-readable-p" (nth 4 elt)))
-		     ;; Result.
-		     (mapcar #'car result))
+		   (tramp-maybe-send-script
+		    v tramp-perl-file-name-all-completions
+		    "tramp_perl_file_name_all_completions")
+		 ;; Used in `tramp-shell-file-name-all-completions'.
+		 (tramp-maybe-send-script
+		  v tramp-bundle-read-file-names "tramp_bundle_read_file_names")
+		 (tramp-maybe-send-script
+		  v tramp-shell-file-name-all-completions
+		  "tramp_shell_file_name_all_completions"))
 
-		 ;; Do it with ls.
-		 (when (tramp-send-command-and-check
-			v (format (concat
-				   "cd %s 2>&1 && %s -a 2>%s"
-				   " | while IFS= read f; do"
-				   " if %s -d \"$f\" 2>%s;"
-				   " then echo \"$f/\"; else echo \"$f\"; fi;"
-				   " done")
-				  (tramp-shell-quote-argument localname)
-				  (tramp-get-ls-command v)
-				  (tramp-get-remote-null-device v)
-				  (tramp-get-test-command v)
-				  (tramp-get-remote-null-device v)))
+	       (dolist
+		   (elt
+		    (tramp-send-command-and-read
+		     v (format
+			"%s %s"
+			(if (tramp-get-remote-perl v)
+			    "tramp_perl_file_name_all_completions"
+			  "tramp_shell_file_name_all_completions")
+			(tramp-shell-quote-argument localname))
+		     'noerror)
+		    result)
+		 ;; Don't cache "." and "..".
+		 (when (string-match-p
+			directory-files-no-dot-files-regexp
+			(file-name-nondirectory (car elt)))
+		   (tramp-set-file-property v (car elt) "file-exists-p" (nth 1 elt))
+		   (tramp-set-file-property v (car elt) "file-readable-p" (nth 2 elt))
+		   (tramp-set-file-property v (car elt) "file-directory-p" (nth 3 elt))
+		   (tramp-set-file-property v (car elt) "file-executable-p" (nth 4 elt)))
 
-		   ;; Now grab the output.
-		   (with-current-buffer (tramp-get-buffer v)
-		     (goto-char (point-max))
-		     (while (zerop (forward-line -1))
-		       (push
-			(buffer-substring (point) (line-end-position)) result)))
-		   result))))))))))
+		 (push
+		  (concat
+		   (file-name-nondirectory (car elt)) (and (nth 3 elt) "/"))
+		  result))))))))))
 
 ;; cp, mv and ln
 
@@ -2611,14 +2618,11 @@ The method used must be an out-of-band method."
 		 ;; can be handled.  We don't set a timeout, because
 		 ;; the copying of large files can last longer than 60
 		 ;; secs.
-		 p (let ((default-directory
-			  tramp-compat-temporary-file-directory))
-		     (apply
-		      #'start-process
-		      (tramp-get-connection-name v)
-		      (tramp-get-connection-buffer v)
-		      copy-program copy-args)))
-		(tramp-post-process-creation p v)
+		 p (apply
+		    #'tramp-start-process v
+		    (tramp-get-connection-name v)
+		    (tramp-get-connection-buffer v)
+		    copy-program copy-args))
 
 		;; We must adapt `tramp-local-end-of-line' for sending
 		;; the password.  Also, we indicate that perhaps
@@ -3615,8 +3619,9 @@ will be used."
 
 (defun tramp-bundle-read-file-names (vec files)
   "Read file attributes of FILES and with one command fill the cache.
-FILES must be the local names only.  The cache attributes to be
-filled are described in `tramp-bundle-read-file-names'."
+FILES must be the local names only.  The cache attributes to be filled
+are \"file-exists-p\", \"file-readable-p\", \"file-directory-p\" and
+\"file-executable-p\"."
   (when files
     (tramp-maybe-send-script
      vec tramp-bundle-read-file-names "tramp_bundle_read_file_names")
@@ -3640,7 +3645,8 @@ filled are described in `tramp-bundle-read-file-names'."
 
       (tramp-set-file-property vec (car elt) "file-exists-p" (nth 1 elt))
       (tramp-set-file-property vec (car elt) "file-readable-p" (nth 2 elt))
-      (tramp-set-file-property vec (car elt) "file-directory-p" (nth 3 elt)))))
+      (tramp-set-file-property vec (car elt) "file-directory-p" (nth 3 elt))
+      (tramp-set-file-property vec (car elt) "file-executable-p" (nth 4 elt)))))
 
 (defvar tramp-vc-registered-file-names nil
   "List used to collect file names, which are checked during `vc-registered'.")
@@ -3663,6 +3669,8 @@ filled are described in `tramp-bundle-read-file-names'."
 (defun tramp-sh-handle-vc-registered (file)
   "Like `vc-registered' for Tramp files."
   (when vc-handled-backends
+    ;; Starting with Emacs 31, use `revert-buffer-in-progress'.
+    (with-suppressed-warnings ((obsolete revert-buffer-in-progress-p))
     (let ((inhibit-message (or revert-buffer-in-progress-p inhibit-message))
 	  (temp-message (unless revert-buffer-in-progress-p "")))
       (with-temp-message temp-message
@@ -3722,7 +3730,7 @@ filled are described in `tramp-bundle-read-file-names'."
 	      ;; Run.
 	      (tramp-with-demoted-errors
 	          v "Error in 2nd pass of `vc-registered': %s"
-		(tramp-run-real-handler #'vc-registered (list file))))))))))
+		(tramp-run-real-handler #'vc-registered (list file)))))))))))
 
 ;;;###tramp-autoload
 (defun tramp-sh-file-name-handler (operation &rest args)
@@ -3856,8 +3864,6 @@ Fall back to normal file name handler if no Tramp handler exists."
 (defun tramp-sh-gio-monitor-process-filter (proc string)
   "Read output from \"gio monitor\" and add corresponding `file-notify' events."
   (let ((events (process-get proc 'tramp-events))
-	(remote-prefix
-	 (file-remote-p (tramp-get-default-directory (process-buffer proc))))
 	(rest-string (process-get proc 'tramp-rest-string))
 	pos)
     (when rest-string
@@ -3872,14 +3878,17 @@ Fall back to normal file name handler if no Tramp handler exists."
     (catch 'doesnt-work
       ;; https://bugs.launchpad.net/bugs/1742946
       (when (string-match-p
-	     (rx (| "Monitoring not supported" "No locations given")) string)
+	     (rx (| "Monitoring not supported"
+                    "No locations given"
+                    "Unable to find default local file monitor type"))
+             string)
         (delete-process proc)
         (throw 'doesnt-work nil))
 
       ;; Determine monitor name.
-      (unless (tramp-connection-property-p proc "gio-file-monitor")
+      (unless (tramp-connection-property-p proc "file-monitor")
         (tramp-set-connection-property
-         proc "gio-file-monitor"
+         proc "file-monitor"
          (cond
           ;; We have seen this on cygwin gio and on emba.  Let's make
           ;; some assumptions.
@@ -3909,7 +3918,7 @@ Fall back to normal file name handler if no Tramp handler exists."
 	       bol (+ (not ":")) ":" blank
 	       (group (+ (not ":"))) ":" blank
 	       (group (regexp (regexp-opt tramp-gio-events)))
-	       (? blank (group (+ (not ":")))) eol)
+	       (? blank (group (+ (not (any "\r\n:"))))) eol)
 	      string)
 
         (let* ((file (match-string 1 string))
@@ -3919,10 +3928,7 @@ Fall back to normal file name handler if no Tramp handler exists."
 	         proc
 	         (list
 		  (intern-soft (match-string 2 string)))
-	         ;; File names are returned as absolute paths.  We
-	         ;; must add the remote prefix.
-	         (concat remote-prefix file)
-	         (when file1 (concat remote-prefix file1)))))
+                 file file1)))
 	  (setq string (replace-match "" nil nil string))
           ;; Add an Emacs event now.
 	  ;; `insert-special-event' exists since Emacs 31.
@@ -5211,7 +5217,6 @@ connection if a previous connection has died for some reason."
 	      ;; Start new process.
 	      (when (and p (processp p))
 		(delete-process p))
-	      (setenv "TERM" tramp-terminal-type)
 	      (setenv "LC_ALL" (tramp-get-local-locale vec))
 	      (if (stringp tramp-histfile-override)
 		  (setenv "HISTFILE" tramp-histfile-override)
@@ -5220,8 +5225,6 @@ connection if a previous connection has died for some reason."
 		      (setenv "HISTFILE")
 		      (setenv "HISTFILESIZE" "0")
 		      (setenv "HISTSIZE" "0"))))
-	      (setenv "PROMPT_COMMAND")
-	      (setenv "PS1" tramp-initial-end-of-output)
 	      (unless (stringp tramp-encoding-shell)
                 (tramp-error vec 'file-error "`tramp-encoding-shell' not set"))
 	      (let* ((current-host tramp-system-name)
@@ -5239,21 +5242,18 @@ connection if a previous connection has died for some reason."
 		     (extra-args (tramp-get-sh-extra-args tramp-encoding-shell))
 		     ;; This must be done in order to avoid our file
 		     ;; name handler.
-		     (p (let ((default-directory
-			       tramp-compat-temporary-file-directory))
-			  (apply
-			   #'start-process
-			   (tramp-get-connection-name vec)
-			   (tramp-get-connection-buffer vec)
-			   (append
-			    `(,tramp-encoding-shell)
-			    (and extra-args (split-string extra-args))
-			    (and tramp-encoding-command-interactive
-				 `(,tramp-encoding-command-interactive)))))))
+		     (p (apply
+			 #'tramp-start-process vec
+			 (tramp-get-connection-name vec)
+			 (tramp-get-connection-buffer vec)
+			 (append
+			  `(,tramp-encoding-shell)
+			  (and extra-args (split-string extra-args))
+			  (and tramp-encoding-command-interactive
+			       `(,tramp-encoding-command-interactive))))))
 
 		;; Set sentinel.  Initialize variables.
 		(set-process-sentinel p #'tramp-process-sentinel)
-		(tramp-post-process-creation p vec)
 		(setq tramp-current-connection (cons vec (current-time)))
 
 		;; Set connection-local variables.

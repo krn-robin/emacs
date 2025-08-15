@@ -651,7 +651,8 @@ compilation and evaluation time conflicts."
 
 (add-to-list
  'treesit-language-source-alist
- '(c-sharp "https://github.com/tree-sitter/tree-sitter-c-sharp" "v0.23.1")
+ '(c-sharp "https://github.com/tree-sitter/tree-sitter-c-sharp"
+           :commit "362a8a41b265056592a0c3771664a21d23a71392")
  t)
 
 (defcustom csharp-ts-mode-indent-offset 4
@@ -1218,11 +1219,14 @@ Key bindings:
                           "local_function_statement")
                   eos))
 
-  (treesit-major-mode-setup)
-
-  (add-to-list 'auto-mode-alist '("\\.cs\\'" . csharp-ts-mode)))
+  (treesit-major-mode-setup))
 
 (derived-mode-add-parents 'csharp-ts-mode '(csharp-mode))
+
+;;;###autoload
+(when (treesit-available-p)
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(csharp-mode . csharp-ts-mode)))
 
 (provide 'csharp-mode)
 

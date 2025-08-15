@@ -30,7 +30,6 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include <sys/random.h>
 #include <unistd.h>
 
-#include <boot-time.h>
 #include <c-ctype.h>
 #include <close-stream.h>
 #include <pathmax.h>
@@ -2715,31 +2714,20 @@ emacs_fchmodat (int fd, const char *path, mode_t mode, int flags)
 #endif /* !(defined HAVE_ANDROID && !defined ANDROID_STUBIFY) */
 }
 
-/* Maximum number of bytes to read or write in a single system call.
-   This works around a serious bug in Linux kernels before 2.6.16; see
-   <https://bugzilla.redhat.com/show_bug.cgi?format=multiple&id=612839>.
-   It's likely to work around similar bugs in other operating systems, so do it
-   on all platforms.  Round INT_MAX down to a page size, with the conservative
-   assumption that page sizes are at most 2**18 bytes (any kernel with a
-   page size larger than that shouldn't have the bug).  */
-#ifndef MAX_RW_COUNT
-#define MAX_RW_COUNT (INT_MAX >> 18 << 18)
-#endif
-
-/* Verify that MAX_RW_COUNT fits in the relevant standard types.  */
+/* Verify that SYS_BUFSIZE_MAX fits in the relevant standard types.  */
 #ifndef SSIZE_MAX
 # define SSIZE_MAX TYPE_MAXIMUM (ssize_t)
 #endif
-static_assert (MAX_RW_COUNT <= PTRDIFF_MAX);
-static_assert (MAX_RW_COUNT <= SIZE_MAX);
-static_assert (MAX_RW_COUNT <= SSIZE_MAX);
+static_assert (SYS_BUFSIZE_MAX <= PTRDIFF_MAX);
+static_assert (SYS_BUFSIZE_MAX <= SIZE_MAX);
+static_assert (SYS_BUFSIZE_MAX <= SSIZE_MAX);
 
 #ifdef WINDOWSNT
 /* Verify that Emacs read requests cannot cause trouble, even in
    64-bit builds.  The last argument of 'read' is 'unsigned int', and
    the return value's type (see 'sys_read') is 'int'.  */
-static_assert (MAX_RW_COUNT <= INT_MAX);
-static_assert (MAX_RW_COUNT <= UINT_MAX);
+static_assert (SYS_BUFSIZE_MAX <= INT_MAX);
+static_assert (SYS_BUFSIZE_MAX <= UINT_MAX);
 #endif
 
 /* Read from FD to a buffer BUF with size NBYTE.
@@ -2751,7 +2739,7 @@ static ptrdiff_t
 emacs_intr_read (int fd, void *buf, ptrdiff_t nbyte, bool interruptible)
 {
   /* No caller should ever pass a too-large size to emacs_read.  */
-  eassert (nbyte <= MAX_RW_COUNT);
+  eassert (nbyte <= SYS_BUFSIZE_MAX);
 
   ssize_t result;
 
@@ -2797,7 +2785,7 @@ emacs_full_write (int fd, char const *buf, ptrdiff_t nbyte,
 
   while (nbyte > 0)
     {
-      ssize_t n = write (fd, buf, min (nbyte, MAX_RW_COUNT));
+      ssize_t n = write (fd, buf, min (nbyte, SYS_BUFSIZE_MAX));
 
       if (n < 0)
 	{
@@ -3454,6 +3442,21 @@ put_jiffies (Lisp_Object attrs, Lisp_Object propname,
   return Fcons (Fcons (propname, time_from_jiffies (ticks, hz, Qnil)), attrs);
 }
 
+/* Return the host uptime with resolution HZ if successful, otherwise nil.
+   Do not use get_boot_time, which returns a container's
+   boot time instead of the underlying host's boot time.  */
+static Lisp_Object
+get_host_uptime (Lisp_Object hz)
+{
+  /* clock_gettime is available in glibc 2.14+, Android, and musl libc.  */
+# if !defined __GLIBC__ || 2 < __GLIBC__ + (14 <= __GLIBC_MINOR__)
+  struct timespec upt;
+  if (0 <= clock_gettime (CLOCK_BOOTTIME, &upt))
+    return Ftime_convert (timespec_to_lisp (upt), hz);
+#endif
+  return Qnil;
+}
+
 # if defined GNU_LINUX || defined __ANDROID__
 #define MAJOR(d) (((unsigned)(d) >> 8) & 0xfff)
 #define MINOR(d) (((unsigned)(d) & 0xff) | (((unsigned)(d) & 0xfff00000) >> 12))
@@ -3670,12 +3673,11 @@ system_process_attributes (Lisp_Object pid)
 	      attrs = put_jiffies (attrs, Qcstime, cstime, hz);
 	      attrs = put_jiffies (attrs, Qctime, cstime + cutime, hz);
 
-	      struct timespec bt;
-	      if (get_boot_time (&bt) == 0)
+	      Lisp_Object uptime = get_host_uptime (hz);
+	      if (!NILP (uptime))
 		{
-		  Lisp_Object boot = Ftime_convert (timespec_to_lisp (bt), hz);
 		  Lisp_Object now = Ftime_convert (Qnil, hz);
-		  Lisp_Object uptime = Ftime_subtract (now, boot);
+		  Lisp_Object boot = Ftime_subtract (now, uptime);
 		  Lisp_Object tstart = time_from_jiffies (start, hz, hz);
 		  Lisp_Object lstart =
 		    Ftime_convert (Ftime_add (boot, tstart), Qnil);

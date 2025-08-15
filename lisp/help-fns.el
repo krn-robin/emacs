@@ -632,7 +632,11 @@ the C sources, too."
                              (format-message "`%s'" remapped)
 		           "an anonymous command"))
                   (princ "as well.\n"))
-                (or remapped (princ "."))
+                ;; The (= (point) start) condition tests whether
+                ;; 'help-fns--insert-menu-bindings' inserted anything;
+                ;; if it didn't, we already have a period from the
+                ;; previous 'princ' call.
+                (or remapped (= (point) start) (princ "."))
                 (fill-region-as-paragraph start (point))))
             (ensure-empty-lines)))))))
 
@@ -2249,13 +2253,14 @@ is enabled in the Help buffer."
                      (describe-function major))))
           (insert " mode")
           (when-let* ((file-name (find-lisp-object-file-name major nil)))
-	    (insert (format " defined in %s:\n\n"
+	    (insert (format " defined in %s"
                             (buttonize
                              (help-fns-short-filename file-name)
                              (lambda (_)
                                (help-function-def--button-function
                                 major file-name))))))
-          (insert (help-split-fundoc (documentation major) nil 'doc)
+          (insert ":\n\n"
+                  (help-split-fundoc (documentation major) nil 'doc)
                   (with-current-buffer buffer
                     (help-fns--list-local-commands)))
           (ensure-empty-lines 1)

@@ -1280,8 +1280,15 @@ function that converts absolute dates to dates of the appropriate type."
        (month "[0-9]+\\|\\*")
        (day "[0-9]+\\|\\*")
        (year "[0-9]+\\|\\*"))
-    (let* ((case-fold-search t)
-           marks)
+    (let ((months-alist (if months (calendar-make-alist months)
+                          (calendar-make-alist
+                           calendar-month-name-array
+                           1 nil calendar-month-abbrev-array
+                           (mapcar (lambda (e)
+                                     (format "%s." e))
+                                   calendar-month-abbrev-array))))
+          (case-fold-search t)
+          marks)
       (dolist (date-form diary-date-forms)
         (if (eq (car date-form) 'backup) ; ignore 'backup directive
             (setq date-form (cdr date-form)))
@@ -1363,16 +1370,7 @@ function that converts absolute dates to dates of the appropriate type."
                 (if mm-name
                     (setq mm
                           (if (string-equal mm-name "*") 0
-                            (cdr (assoc-string
-                                  mm-name
-                                  (if months (calendar-make-alist months)
-                                    (calendar-make-alist
-                                     calendar-month-name-array
-                                     1 nil calendar-month-abbrev-array
-                                     (mapcar (lambda (e)
-                                               (format "%s." e))
-                                             calendar-month-abbrev-array)))
-                                  t)))))
+                            (cdr (assoc-string mm-name months-alist t)))))
                 (funcall markfunc mm dd yy marks)))))))))
 
 ;;;###cal-autoload
@@ -1397,8 +1395,8 @@ marks.  This is intended to deal with deleted diary entries."
   ;; ii) called via calendar-redraw (since calendar has already been
   ;; erased).
   ;; Use of REDRAW handles both of these cases.
-  (when (and redraw calendar-mark-diary-entries-flag)
-    (setq calendar-mark-diary-entries-flag nil)
+  (when (and redraw calendar-mark-diary-entries)
+    (setq calendar-mark-diary-entries nil)
     (calendar-redraw))
   (let ((diary-marking-entries-flag t)
         (diary-buffer (find-buffer-visiting diary-file))
@@ -1419,7 +1417,7 @@ marks.  This is intended to deal with deleted diary entries."
               ;; If including, caller has already verified it is readable.
               (insert-file-contents diary-file)
             (if (eq major-mode (default-value 'major-mode)) (diary-mode)))
-          (setq calendar-mark-diary-entries-flag t)
+          (setq calendar-mark-diary-entries t)
           (setq file-glob-attrs (nth 1 (diary-pull-attrs nil '())))
           (with-syntax-table diary-syntax-table
             (save-excursion
@@ -2236,7 +2234,8 @@ Prefix argument ARG makes the entry nonmarking."
      (format "%s(diary-cyclic %d %s)"
              diary-sexp-entry-symbol
              (calendar-read-sexp "Repeat every how many days"
-                                 (lambda (x) (> x 0)))
+                                 (lambda (x) (> x 0))
+                                 1)
              (calendar-date-string (calendar-cursor-to-date t) nil t))
      arg)))
 
@@ -2244,7 +2243,7 @@ Prefix argument ARG makes the entry nonmarking."
 
 (defun diary-redraw-calendar ()
   "If `calendar-buffer' is live and diary entries are marked, redraw it."
-  (and calendar-mark-diary-entries-flag
+  (and calendar-mark-diary-entries
        (save-excursion
          (calendar-redraw)))
   ;; Return value suitable for `write-contents-functions'.

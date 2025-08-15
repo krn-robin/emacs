@@ -1212,14 +1212,15 @@ the function needs to examine, starting with FILE."
   ;; Represent /home/luser/foo as ~/foo so that we don't try to look for
   ;; `name' in /home or in /.
   (setq file (abbreviate-file-name (expand-file-name file)))
+  (when (and (not (directory-name-p file))
+	     (file-directory-p file))
+    (setq file (file-name-as-directory file)))
   (let ((root nil)
         try)
     (while (not (or root
                     (null file)
                     (string-match locate-dominating-stop-dir-regexp file)))
-      (setq file (if (file-directory-p file)
-                     file
-                   (file-name-directory file))
+      (setq file (file-name-directory file)
             try (if (stringp name)
                     (file-exists-p (expand-file-name name file))
                   (funcall name file)))
@@ -1319,7 +1320,7 @@ remote, otherwise search locally."
 	          (mapcar
 	           (lambda (x) (concat (file-remote-p default-directory) x))
 	           (exec-path))
-	          exec-suffixes 'file-executable-p)))
+	          (exec-suffixes) 'file-executable-p)))
         (when (stringp res) (file-local-name res)))
     ;; Use 1 rather than file-executable-p to better match the
     ;; behavior of call-process.
@@ -2531,7 +2532,9 @@ be visible in the echo area."
 If a buffer exists visiting FILENAME, return that one, but
 verify that the file has not changed since visited or saved.
 The buffer is not selected, just returned to the caller.
-Optional second arg NOWARN non-nil means suppress any warning messages.
+Optional second arg NOWARN non-nil means suppress any warning messages,
+and also don't verify that the file has not been changed since
+last visited or saved.
 Optional third arg RAWFILE non-nil means the file is read literally.
 Optional fourth arg WILDCARDS non-nil means do wildcard processing
 and visit all the matching files.  When wildcards are actually
@@ -2736,27 +2739,29 @@ Do you want to revisit the file normally now? ")))
       (and (not rawfile)
 	   (set-buffer-multibyte t))
       (if rawfile
-	  (condition-case ()
+	  (condition-case err
 	      (let ((inhibit-read-only t)
                     (enable-local-variables nil))
 		(insert-file-contents-literally filename t))
 	    (file-error
-	     (when (and (file-exists-p filename)
-			(not (file-readable-p filename)))
+	     (when (file-exists-p filename)
 	       (kill-buffer buf)
-	       (signal 'file-error (list "File is not readable"
-					 filename)))
+	       (signal 'file-error
+		       (if (file-readable-p filename)
+			   (cdr err)
+			 (list "File is not readable" filename))))
 	     ;; Unconditionally set error
 	     (setq error t)))
-	(condition-case ()
+	(condition-case err
 	    (let ((inhibit-read-only t))
 	      (insert-file-contents filename t))
 	  (file-error
-	   (when (and (file-exists-p filename)
-		      (not (file-readable-p filename)))
+	   (when (file-exists-p filename)
 	     (kill-buffer buf)
-	     (signal 'file-error (list "File is not readable"
-				       filename)))
+	     (signal 'file-error
+		     (if (file-readable-p filename)
+			 (cdr err)
+		       (list "File is not readable" filename))))
 	   ;; Run find-file-not-found-functions until one returns non-nil.
 	   (or (run-hook-with-args-until-success 'find-file-not-found-functions)
 	       ;; If they fail too, set error.
@@ -2882,7 +2887,7 @@ error in reading the file.  WARN non-nil means warn if there
 exists an auto-save file more recent than the visited file.
 NOAUTO means don't mess with auto-save mode.
 Fourth arg AFTER-FIND-FILE-FROM-REVERT-BUFFER is ignored
-\(see `revert-buffer-in-progress-p' for similar functionality).
+\(see `revert-buffer-in-progress' for similar functionality).
 Fifth arg NOMODES non-nil means don't alter the file's modes.
 Finishes by calling the functions in `find-file-hook'
 unless NOMODES is non-nil."
@@ -3245,6 +3250,7 @@ ARC\\|ZIP\\|LZH\\|LHA\\|ZOO\\|[JEW]AR\\|XPI\\|RAR\\|CBR\\|7Z\\|SQUASHFS\\)\\'" .
     ;; and after the .scm.[0-9] and CVS' <file>.<rev> patterns too.
     ("\\.[1-9]\\'" . nroff-mode)
     ;; Image file types probably supported by `image-convert'.
+    ("\\.avif\\'" . image-mode)
     ("\\.art\\'" . image-mode)
     ("\\.avs\\'" . image-mode)
     ("\\.bmp\\'" . image-mode)
@@ -3284,7 +3290,6 @@ ARC\\|ZIP\\|LZH\\|LHA\\|ZOO\\|[JEW]AR\\|XPI\\|RAR\\|CBR\\|7Z\\|SQUASHFS\\)\\'" .
     ("\\.six\\'" . image-mode)
     ("\\.tga\\'" . image-mode)
     ("\\.wbmp\\'" . image-mode)
-    ("\\.webp\\'" . image-mode)
     ("\\.wmf\\'" . image-mode)
     ("\\.wpg\\'" . image-mode)
     ("\\.xcf\\'" . image-mode)
@@ -4783,10 +4788,7 @@ those in the first."
                      (list file-2 file-1)))
         (when (and f
                    (file-readable-p f)
-                   ;; FIXME: Aren't file-regular-p and
-                   ;; file-directory-p mutually exclusive?
-                   (file-regular-p f)
-                   (not (file-directory-p f)))
+                   (file-regular-p f))
           (push f out)))
       out)))
 
@@ -7105,9 +7107,10 @@ hook functions.
 The function `revert-buffer--default' runs this.
 A customized `revert-buffer-function' need not run this hook.")
 
-(defvar revert-buffer-in-progress-p nil
+(define-obsolete-variable-alias
+  'revert-buffer-in-progress-p 'revert-buffer-in-progress "31.1")
+(defvar revert-buffer-in-progress nil
   "Non-nil if a `revert-buffer' operation is in progress, nil otherwise.")
-
 (defvar revert-buffer-internal-hook)
 
 ;; `revert-buffer-function' was defined long ago to be a function of only
@@ -7166,7 +7169,7 @@ revert buffers without querying for confirmation.)
 Optional third argument PRESERVE-MODES non-nil means don't alter
 the files modes.  Normally we reinitialize them using `normal-mode'.
 
-This function binds `revert-buffer-in-progress-p' non-nil while it operates.
+This function binds `revert-buffer-in-progress' non-nil while it operates.
 
 This function calls the function that `revert-buffer-function' specifies
 to do the work, with arguments IGNORE-AUTO and NOCONFIRM.
@@ -7187,7 +7190,7 @@ preserve markers and overlays, at the price of being slower."
   ;; reversal of the argument sense.  So I'm just changing the user
   ;; interface, but leaving the programmatic interface the same.
   (interactive (list (not current-prefix-arg)))
-  (let ((revert-buffer-in-progress-p t)
+  (let ((revert-buffer-in-progress t)
         (revert-buffer-preserve-modes preserve-modes)
         restore-functions)
     (run-hook-wrapped 'revert-buffer-restore-functions
@@ -8288,10 +8291,14 @@ Valid wildcards are `*', `?', `[abc]' and `[a-z]'."
     ;; "//DIRED-OPTIONS//" line, but no "//DIRED//" line.
     ;; We take care of that case later.
     (forward-line -2)
-    (when (looking-at "//SUBDIRED//")
+    ;; We reset case-fold-search here and elsewhere, because
+    ;; case-insensitive search for strings with uppercase 'I' will fail
+    ;; in language environments (such as Turkish) where 'I' downcases to
+    ;; 'ı', not to 'i'.
+    (when (let ((case-fold-search nil)) (looking-at "//SUBDIRED//"))
       (delete-region (point) (progn (forward-line 1) (point)))
       (forward-line -1))
-    (if (looking-at "//DIRED//")
+    (if (let ((case-fold-search nil)) (looking-at "//DIRED//"))
 	(let ((end (line-end-position))
 	      (linebeg (point))
 	      error-lines)
@@ -8328,7 +8335,7 @@ Valid wildcards are `*', `?', `[abc]' and `[a-z]'."
       ;; "//DIRED-OPTIONS//"-line, but no "//DIRED//"-line
       ;; and we went one line too far back (see above).
       (forward-line 1))
-    (if (looking-at "//DIRED-OPTIONS//")
+    (if (let ((case-fold-search nil)) (looking-at "//DIRED-OPTIONS//"))
 	(delete-region (point) (progn (forward-line 1) (point))))))
 
 ;; insert-directory
@@ -8470,11 +8477,12 @@ normally equivalent short `-D' option is just passed on to
 		  (string-match "--dired\\>" switches)
 		(member "--dired" switches))
 	  (save-excursion
-	    (forward-line -2)
-	    (when (looking-at "//SUBDIRED//")
-	      (forward-line -1))
-	    (if (looking-at "//DIRED//")
-		(setq result 0))))
+            (let ((case-fold-search nil))
+	      (forward-line -2)
+	      (when (looking-at "//SUBDIRED//")
+	        (forward-line -1))
+	      (if (looking-at "//DIRED//")
+		  (setq result 0)))))
 
 	(when (and (not (eq 0 result))
 		   (eq insert-directory-ls-version 'unknown))

@@ -23,11 +23,12 @@
 
 ;;; Tree-sitter language versions
 ;;
-;; heex-ts-mode is known to work with the following languages and version:
+;; heex-ts-mode has been tested with the following grammars and version:
 ;; - tree-sitter-heex: v0.7.0
+;; - tree-sitter-elixir: v0.3.3
 ;;
 ;; We try our best to make builtin modes work with latest grammar
-;; versions, so a more recent grammar version has a good chance to work.
+;; versions, so a more recent grammar has a good chance to work too.
 ;; Send us a bug report if it doesn't.
 
 ;;; Commentary:
@@ -46,11 +47,13 @@
 
 (add-to-list
  'treesit-language-source-alist
- '(heex "https://github.com/phoenixframework/tree-sitter-heex" "v0.7.0")
+ '(heex "https://github.com/phoenixframework/tree-sitter-heex"
+        :commit "f6b83f305a755cd49cf5f6a66b2b789be93dc7b9")
  t)
 (add-to-list
  'treesit-language-source-alist
- '(elixir "https://github.com/elixir-lang/tree-sitter-elixir" "v0.3.3")
+ '(elixir "https://github.com/elixir-lang/tree-sitter-elixir"
+          :commit "02a6f7fd4be28dd94ee4dd2ca19cb777053ea74e")
  t)
 
 (defgroup heex-ts nil
@@ -262,10 +265,23 @@ Return nil if NODE is not a defun node or doesn't have a name."
 
 (derived-mode-add-parents 'heex-ts-mode '(heex-mode))
 
-(if (treesit-ready-p 'heex)
-    ;; Both .heex and the deprecated .leex files should work
-    ;; with the tree-sitter-heex grammar.
-    (add-to-list 'auto-mode-alist '("\\.[hl]?eex\\'" . heex-ts-mode)))
+;;;###autoload
+(defun heex-ts-mode-maybe ()
+  "Enable `heex-ts-mode' when its grammar is available."
+  (if (or (treesit-language-available-p 'heex)
+          (eq treesit-enabled-modes t)
+          (memq 'heex-ts-mode treesit-enabled-modes))
+      (heex-ts-mode)
+    (fundamental-mode)))
+
+;;;###autoload
+(when (treesit-available-p)
+  ;; Both .heex and the deprecated .leex files should work
+  ;; with the tree-sitter-heex grammar.
+  (add-to-list 'auto-mode-alist '("\\.[hl]?eex\\'" . heex-ts-mode-maybe))
+  ;; To be able to toggle between an external package and core ts-mode:
+  (add-to-list 'treesit-major-mode-remap-alist
+               '(heex-mode . heex-ts-mode)))
 
 (provide 'heex-ts-mode)
 ;;; heex-ts-mode.el ends here
